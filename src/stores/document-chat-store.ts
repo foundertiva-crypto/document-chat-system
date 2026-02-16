@@ -1904,10 +1904,42 @@ export const useDocumentChatSystemStore = create<DocumentChatSystemStore>()(
           },
 
           createFolder: async (name, parentId, description, color) => {
-            // DEPRECATED: This method is for backward compatibility only
-            // Use documentsSlice.createFolder with proper organizationId
-            console.warn('createFolder: Using deprecated backward compatibility method. Please update to use documentsSlice.createFolder directly with organizationId.');
-            throw new Error('createFolder backward compatibility method requires organizationId parameter. Use documentsSlice.createFolder instead.');
+            // DEPRECATED: This method is for backward compatibility only.
+            // Prefer documentsSlice.createFolder({ ... }) with explicit organizationId.
+            const store = get() as DocumentChatSystemStore
+            const parentFolder = parentId
+              ? store.documents.folders.find((folder) => folder.id === parentId)
+              : null
+            const organizationId =
+              parentFolder?.organizationId ||
+              store.organization.current?.id ||
+              store.documents.folders[0]?.organizationId
+
+            console.warn(
+              'createFolder: Using deprecated backward compatibility method. Please update to use documentsSlice.createFolder directly with organizationId.'
+            )
+
+            if (!organizationId) {
+              const errorMessage =
+                'Unable to create folder: organizationId could not be determined. Please refresh and try again.'
+
+              set((state: DocumentChatSystemStore) => {
+                state.documents.error = errorMessage
+              })
+
+              return store.documents._createErrorResult<Folder>(
+                errorMessage,
+                'CREATE_FOLDER'
+              )
+            }
+
+            return documentsSlice.createFolder({
+              name,
+              parentId,
+              description,
+              color,
+              organizationId,
+            })
           },
 
           updateFolder: async (folderId, updates) => {
