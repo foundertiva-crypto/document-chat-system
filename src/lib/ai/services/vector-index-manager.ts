@@ -34,14 +34,34 @@ export interface OptimizationResult {
 }
 
 export class VectorIndexManager {
-  private pinecone: Pinecone
+  private pinecone: Pinecone | null = null
   private pgVectorService: PgVectorSearchService
 
   constructor() {
-    this.pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY!,
-    })
     this.pgVectorService = new PgVectorSearchService()
+  }
+
+  private getPineconeClient(): Pinecone {
+    if (this.pinecone) {
+      return this.pinecone
+    }
+
+    const apiKey = process.env.PINECONE_API_KEY
+    if (!apiKey) {
+      throw new Error('PINECONE_API_KEY is not configured')
+    }
+
+    this.pinecone = new Pinecone({ apiKey })
+    return this.pinecone
+  }
+
+  private getIndexName(): string {
+    const indexName = process.env.PINECONE_INDEX_NAME
+    if (!indexName) {
+      throw new Error('PINECONE_INDEX_NAME is not configured')
+    }
+
+    return indexName
   }
 
   /**
@@ -141,7 +161,7 @@ export class VectorIndexManager {
    */
   private async getPineconeStats(): Promise<IndexStats> {
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       const stats = await index.describeIndexStats()
 
       // Query for organizational data
@@ -207,7 +227,7 @@ export class VectorIndexManager {
     })
     const validDocSet = new Set(validDocumentIds.map(d => d.id))
 
-    const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+    const index = this.getPineconeClient().index(this.getIndexName())
     let orphanedCount = 0
     let processedCount = 0
 

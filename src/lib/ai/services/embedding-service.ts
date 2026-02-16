@@ -35,7 +35,7 @@ export interface PineconeMetadata {
 }
 
 export class EmbeddingService {
-  private pinecone: Pinecone
+  private pinecone: Pinecone | null = null
   private aiManager: AIServiceManager
   private namespaceManager: PineconeNamespaceManager
   private config: EmbeddingConfig
@@ -48,16 +48,34 @@ export class EmbeddingService {
       ...config,
     }
 
-    // Initialize Pinecone
-    this.pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY!,
-    })
-
     // Get AI service manager instance
     this.aiManager = AIServiceManager.getInstance()
     
     // Initialize namespace manager
     this.namespaceManager = defaultNamespaceManager
+  }
+
+  private getPineconeClient(): Pinecone {
+    if (this.pinecone) {
+      return this.pinecone
+    }
+
+    const apiKey = process.env.PINECONE_API_KEY
+    if (!apiKey) {
+      throw new Error('PINECONE_API_KEY is not configured')
+    }
+
+    this.pinecone = new Pinecone({ apiKey })
+    return this.pinecone
+  }
+
+  private getIndexName(): string {
+    const indexName = process.env.PINECONE_INDEX_NAME
+    if (!indexName) {
+      throw new Error('PINECONE_INDEX_NAME is not configured')
+    }
+
+    return indexName
   }
 
   /**
@@ -87,7 +105,7 @@ export class EmbeddingService {
       console.log(
         `📡 Connecting to Pinecone index: ${process.env.PINECONE_INDEX_NAME}`
       )
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       const namespacedIndex = index.namespace(organizationNamespace)
       
       console.log(
@@ -539,7 +557,7 @@ export class EmbeddingService {
     const namespaceInfo = await this.namespaceManager.getOrCreateNamespace(organizationId)
     const organizationNamespace = namespaceInfo.namespace
     
-    const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+    const index = this.getPineconeClient().index(this.getIndexName())
     const namespacedIndex = index.namespace(organizationNamespace)
 
     // Query to find all vectors for this document using metadata filters in organization namespace

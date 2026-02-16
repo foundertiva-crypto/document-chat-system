@@ -7,7 +7,7 @@
 
 import { Pinecone } from '@pinecone-database/pinecone'
 import { AIServiceManager } from '@/lib/ai/ai-service-manager'
-import { PineconeMetadata } from './embedding-service'
+import type { PineconeMetadata } from './embedding-service'
 import { prisma } from '@/lib/prisma'
 import { PgVectorSearchService } from './pgvector-search'
 import { VectorSearchCache, defaultVectorSearchCache } from './vector-search-cache'
@@ -49,7 +49,7 @@ export interface SearchOptions {
 }
 
 export class VectorSearchService {
-  private pinecone: Pinecone
+  private pinecone: Pinecone | null = null
   private aiManager: AIServiceManager
   private namespaceManager: PineconeNamespaceManager
   private pgVectorService: PgVectorSearchService
@@ -58,9 +58,6 @@ export class VectorSearchService {
   private useFallback: boolean = false
 
   constructor() {
-    this.pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY!,
-    })
     this.aiManager = AIServiceManager.getInstance()
     this.namespaceManager = defaultNamespaceManager
     this.pgVectorService = new PgVectorSearchService()
@@ -69,6 +66,29 @@ export class VectorSearchService {
     
     // Check if pgvector fallback should be enabled
     this.useFallback = process.env.ENABLE_PGVECTOR_FALLBACK === 'true'
+  }
+
+  private getPineconeClient(): Pinecone {
+    if (this.pinecone) {
+      return this.pinecone
+    }
+
+    const apiKey = process.env.PINECONE_API_KEY
+    if (!apiKey) {
+      throw new Error('PINECONE_API_KEY is not configured')
+    }
+
+    this.pinecone = new Pinecone({ apiKey })
+    return this.pinecone
+  }
+
+  private getIndexName(): string {
+    const indexName = process.env.PINECONE_INDEX_NAME
+    if (!indexName) {
+      throw new Error('PINECONE_INDEX_NAME is not configured')
+    }
+
+    return indexName
   }
 
   /**
@@ -264,7 +284,7 @@ export class VectorSearchService {
         '🔗 [Pinecone] Connecting to Pinecone index:',
         process.env.PINECONE_INDEX_NAME
       )
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       const namespacedIndex = index.namespace(organizationNamespace)
       
       console.log(
@@ -680,7 +700,7 @@ export class VectorSearchService {
 
     // Test Pinecone health
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       const stats = await index.describeIndexStats()
       result.pinecone = { available: true, error: undefined, stats }
       console.log('✅ Pinecone service healthy')

@@ -6,9 +6,11 @@ import { prisma } from '@/lib/db';
 import { crudAuditLogger } from '@/lib/audit/crud-audit-logger';
 import { checkRateLimit, rateLimitConfigs } from '@/lib/rate-limit';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function createOpenAIClient() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 const chatRequestSchema = z.object({
   messages: z.array(z.object({
@@ -178,6 +180,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    const openai = createOpenAIClient();
 
     // Call OpenAI API
     console.log('🚀 Calling OpenAI API...');
