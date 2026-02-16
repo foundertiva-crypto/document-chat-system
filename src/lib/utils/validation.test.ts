@@ -212,6 +212,12 @@ describe('validatePhoneNumber', () => {
     });
   });
 
+  it('should reject malformed 11-digit formatting that looks like 3-3-5 grouping', () => {
+    const result = validatePhoneNumber('123-456-78901');
+    expect(result.isValid).toBe(false);
+    expect(result.errors).toContain('Invalid phone number format');
+  });
+
   it('should normalize phone numbers', () => {
     const result = validatePhoneNumber('+1 (555) 123-4567', { normalize: true });
     expect(result.isValid).toBe(true);
