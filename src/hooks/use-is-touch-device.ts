@@ -10,7 +10,8 @@ export function useIsTouchDevice() {
       setIsTouchDevice(
         'ontouchstart' in window ||
           navigator.maxTouchPoints > 0 ||
-          navigator.maxTouchPoints > 0
+          // Legacy IE touch detection fallback
+          (((navigator as Navigator & { msMaxTouchPoints?: number }).msMaxTouchPoints) || 0) > 0
       );
     }
 
