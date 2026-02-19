@@ -1147,6 +1147,10 @@ const envSchema = z.object({
     .string()
     .optional()
     .describe('Supabase service role key for server-side operations. Bypasses RLS policies. Used for file uploads, admin operations, and background jobs.'),
+  SUPABASE_STORAGE_BUCKET: z
+    .string()
+    .default('documents')
+    .describe('Supabase Storage bucket name used for file uploads. Default: documents'),
 
   // Stripe Configuration
   STRIPE_PUBLISHABLE_KEY: z
@@ -1624,6 +1628,7 @@ export const supabase = {
   url: env.NEXT_PUBLIC_SUPABASE_URL,
   anonKey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+  storageBucket: env.SUPABASE_STORAGE_BUCKET,
 } as const
 
 export const stripe = {

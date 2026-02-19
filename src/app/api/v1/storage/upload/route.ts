@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { getOrganizationId } from '@/lib/auth/get-organization-id'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, supabaseStorageBucket } from '@/lib/supabase'
 
 /**
  * POST /api/v1/storage/upload
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     // Handle special image types for organizations
     const imageTypes = ['logo', 'banner', 'contact-profile', 'contact']
     let fileName: string
-    const bucketName = 'documents' // Always use documents bucket
+    const bucketName = supabaseStorageBucket
     
     if (imageTypes.includes(type)) {
       // For organization images: {orgId}/images/{type}/{filename}
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to Supabase Storage (documents bucket only)
     const { data, error } = await supabaseAdmin.storage
-      .from('documents')
+      .from(bucketName)
       .upload(fileName, buffer, {
         contentType: file.type,
         metadata: {
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
         error: error,
         message: error.message,
         fileName: fileName,
-        bucketName: 'documents'
+        bucketName
       })
       
       // Provide more specific error messages based on the error type
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       let statusCode = 500
       
       if (error.message?.includes('not found')) {
-        errorMessage = 'Storage bucket not found. Please contact support.'
+        errorMessage = `Storage bucket '${bucketName}' not found. Set SUPABASE_STORAGE_BUCKET correctly or create the bucket in Supabase.`
         statusCode = 503
       } else if (error.message?.includes('permissions') || error.message?.includes('access')) {
         errorMessage = 'Storage access denied. Please contact support.'
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
     
     // First try public URL (for public buckets)
     const { data: publicData } = supabaseAdmin.storage
-      .from('documents')
+      .from(bucketName)
       .getPublicUrl(fileName)
     
     if (publicData?.publicUrl) {
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
         console.log('Public URL not accessible, creating long-term signed URL...', error instanceof Error ? error.message : 'Unknown error')
         // Fallback to signed URL with very long expiry (10 years for profile images)
         const { data: signedData, error: signedError } = await supabaseAdmin.storage
-          .from('documents')
+          .from(bucketName)
           .createSignedUrl(fileName, 60 * 60 * 24 * 365 * 10) // 10 years expiry
         
         if (signedError || !signedData?.signedUrl) {
@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
         console.log('Generated signed URL:', fileUrl)
       }
     } else {
-      console.error('Failed to generate public URL for file:', fileName)
+      console.error('Failed to generate public URL for file:', { fileName, bucketName })
       return NextResponse.json(
         { success: false, error: 'Failed to generate file URL' },
         { status: 500 }

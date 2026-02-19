@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin, supabaseStorageBucket } from '@/lib/supabase';
 import { prisma } from '@/lib/db';
 
 /**
@@ -71,19 +71,20 @@ export async function GET(request: NextRequest) {
             error: bucketsError.message
           };
         } else {
-          const documentsBucket = buckets?.find(b => b.name === 'documents');
+          const configuredBucket = supabaseStorageBucket;
+          const documentsBucket = buckets?.find(b => b.name === configuredBucket);
           diagnostics.checks.storageBuckets = {
             status: documentsBucket ? 'OK' : 'WARNING',
             message: documentsBucket
-              ? 'Documents bucket exists'
-              : 'Documents bucket not found - needs to be created',
+              ? `Configured bucket '${configuredBucket}' exists`
+              : `Configured bucket '${configuredBucket}' not found - create it in Supabase or fix SUPABASE_STORAGE_BUCKET`,
             buckets: buckets?.map(b => ({
               name: b.name,
               public: b.public,
               file_size_limit: b.file_size_limit
             })),
-            documentsBucketExists: !!documentsBucket,
-            documentsBucketPublic: documentsBucket?.public
+            configuredBucketExists: !!documentsBucket,
+            configuredBucketPublic: documentsBucket?.public
           };
         }
       } catch (error: any) {
@@ -95,13 +96,13 @@ export async function GET(request: NextRequest) {
       }
 
       // Check 5: Test upload (small test file)
-      if (diagnostics.checks.storageBuckets?.documentsBucketExists) {
+      if (diagnostics.checks.storageBuckets?.configuredBucketExists) {
         try {
           const testFileName = `test-${Date.now()}.txt`;
           const testContent = new Uint8Array([72, 101, 108, 108, 111]); // "Hello" in bytes
 
           const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-            .from('documents')
+            .from(supabaseStorageBucket)
             .upload(`test/${testFileName}`, testContent, {
               contentType: 'text/plain',
               upsert: true
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
             // Clean up test file
             try {
               await supabaseAdmin.storage
-                .from('documents')
+                .from(supabaseStorageBucket)
                 .remove([uploadData.path]);
             } catch (cleanupError) {
               // Ignore cleanup errors

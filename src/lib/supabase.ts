@@ -4,6 +4,7 @@ import { supabase as supabaseConfig } from '@/lib/config/env';
 const supabaseUrl = supabaseConfig.url;
 const supabaseAnonKey = supabaseConfig.anonKey;
 const supabaseServiceRoleKey = supabaseConfig.serviceRoleKey;
+export const supabaseStorageBucket = supabaseConfig.storageBucket || 'documents';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Document upload features will be disabled.');

@@ -122,15 +122,21 @@ USING (bucket_id = 'documents');
 "
 
 # Use direct connection for SQL execution
-DIRECT_DB_URL="postgresql://postgres:sFmpJcO3fuNVmnJ9@db.gzfzcrecyhmtbuefyvtr.supabase.co:5432/postgres"
+POLICY_SETUP_DONE=false
+if [ -z "$DIRECT_URL" ]; then
+    echo -e "${YELLOW}⚠️  DIRECT_URL not set; skipping automatic SQL policy creation.${NC}"
+    echo "   Set DIRECT_URL in .env.local to run Prisma SQL setup automatically."
+else
+    # Write SQL to temp file and execute
+    TEMP_SQL=$(mktemp)
+    echo "$POLICIES_SQL" > "$TEMP_SQL"
+    if DATABASE_URL="$DIRECT_URL" npx prisma db execute --file "$TEMP_SQL" --schema prisma/schema.prisma; then
+        POLICY_SETUP_DONE=true
+    fi
+    rm "$TEMP_SQL"
+fi
 
-# Write SQL to temp file and execute
-TEMP_SQL=$(mktemp)
-echo "$POLICIES_SQL" > "$TEMP_SQL"
-DATABASE_URL="$DIRECT_DB_URL" npx prisma db execute --file "$TEMP_SQL" --schema prisma/schema.prisma
-rm "$TEMP_SQL"
-
-if [ $? -eq 0 ]; then
+if [ "$POLICY_SETUP_DONE" = true ]; then
     echo ""
     echo -e "${GREEN}✅ Storage policies configured successfully${NC}"
 else
@@ -144,7 +150,11 @@ echo -e "${BLUE}║                      Summary                           ║${
 echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${GREEN}✅ Supabase storage bucket 'documents' is ready${NC}"
-echo -e "${GREEN}✅ Storage policies configured${NC}"
+if [ "$POLICY_SETUP_DONE" = true ]; then
+  echo -e "${GREEN}✅ Storage policies configured${NC}"
+else
+  echo -e "${YELLOW}⚠️  Storage policies not auto-configured (see notes above)${NC}"
+fi
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Try uploading a document in production"
