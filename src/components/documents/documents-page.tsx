@@ -1382,18 +1382,31 @@ const DocumentsPageContent = () => {
       console.log('📄 Opening New Document modal with file:', file.name);
       
     } else if (uploadedFiles.length > 1) {
-      // Multiple files - show notification and open modal for first file
-      notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Processing first file. Upload others individually.`);
-      
-      const firstFile = uploadedFiles[0];
-      const validation = fileOps.validateFile(firstFile);
-      if (!validation.isValid) {
-        notify.error('Invalid File', validation.error || 'File type not supported');
+      // Multiple files - forward to the existing multi-file upload flow.
+      // This keeps drag-and-drop behavior consistent with file picker uploads.
+      const invalidFile = uploadedFiles.find((file) => {
+        const validation = fileOps.validateFile(file);
+        return !validation.isValid;
+      });
+
+      if (invalidFile) {
+        const validation = fileOps.validateFile(invalidFile);
+        notify.error('Invalid File', validation.error || `${invalidFile.name} is not supported`);
         return;
       }
 
-      setDraggedFileForModal(firstFile);
-      setShowCreateDocumentModal(true);
+      const input = fileInputRef.current as HTMLInputElement | null;
+      if (!input) {
+        notify.error('Upload Error', 'Unable to access file upload input. Please try again.');
+        return;
+      }
+
+      const dataTransfer = new DataTransfer();
+      uploadedFiles.forEach((file) => dataTransfer.items.add(file));
+      (input as any).files = dataTransfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+
+      notify.info('Bulk Upload Started', `Uploading ${uploadedFiles.length} files...`);
     }
   }, [fileOps, notify]);
 

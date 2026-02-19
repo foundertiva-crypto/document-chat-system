@@ -61,9 +61,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Validate input
+    const normalizedDocumentType = documentTypeParam || undefined;
     const inputValidation = uploadSchema.safeParse({ 
       organizationId,
-      documentType: documentTypeParam 
+      documentType: normalizedDocumentType 
     });
     if (!inputValidation.success) {
       console.error('❌ Input validation failed:', inputValidation.error.format());
@@ -307,6 +308,8 @@ export async function POST(request: NextRequest) {
       // Trigger immediate basic processing (text extraction + sections only, no AI analysis)
       console.log('🤖 Starting immediate basic processing for document:', documentId);
       
+      let vectorizationStatus: 'QUEUED' | 'COMPLETED' | 'FAILED' | 'SKIPPED' = 'SKIPPED'
+
       try {
         // Import document processor
         const { documentProcessor } = require('@/lib/ai/document-processor');
@@ -321,6 +324,57 @@ export async function POST(request: NextRequest) {
         
         if (processingResult.success) {
           console.log('✅ Basic processing completed successfully for document:', documentId);
+
+          // Ensure vector embeddings are created per uploaded file (important for bulk uploads)
+          // Prefer background queue (Inngest) and fall back to synchronous processing when unavailable.
+          try {
+            const inngestConfigured = !!(process.env.INNGEST_EVENT_KEY && process.env.INNGEST_SIGNING_KEY)
+
+            if (inngestConfigured) {
+              const jobId = `vectorize_${documentId}_${Date.now()}`
+              await inngest.send({
+                name: 'document/vectorize.requested',
+                data: {
+                  documentId,
+                  organizationId,
+                  userId: user.id,
+                  jobId,
+                  options: {
+                    forceReprocess: true
+                  }
+                }
+              })
+              vectorizationStatus = 'QUEUED'
+              console.log('✅ Vectorization queued for uploaded document:', { documentId, jobId })
+            } else {
+              console.warn('⚠️ Inngest not configured, running vectorization synchronously for upload:', documentId)
+              const { defaultEmbeddingProcessor } = require('@/lib/ai/services/document-embedding-processor')
+              const documentForEmbeddings = await prisma.document.findUnique({ where: { id: documentId } })
+
+              if (documentForEmbeddings) {
+                const embeddingResult = await defaultEmbeddingProcessor.processDocument(documentForEmbeddings as any, {
+                  forceReprocess: true
+                })
+
+                vectorizationStatus = embeddingResult.success ? 'COMPLETED' : 'FAILED'
+                if (!embeddingResult.success) {
+                  console.error('❌ Synchronous vectorization failed after upload:', {
+                    documentId,
+                    error: embeddingResult.error
+                  })
+                }
+              } else {
+                vectorizationStatus = 'FAILED'
+                console.error('❌ Unable to load document for synchronous vectorization:', documentId)
+              }
+            }
+          } catch (vectorizationError) {
+            vectorizationStatus = 'FAILED'
+            console.error('❌ Failed to start vectorization for uploaded document:', {
+              documentId,
+              error: vectorizationError instanceof Error ? vectorizationError.message : vectorizationError
+            })
+          }
         } else {
           console.error('❌ Basic processing failed:', processingResult.error);
           // Update document status to failed
@@ -336,6 +390,7 @@ export async function POST(request: NextRequest) {
           });
         }
       } catch (error) {
+        vectorizationStatus = 'FAILED'
         console.error('❌ Failed to process document with basic processing:', error);
         // Update document status to failed
         await prisma.document.update({
@@ -368,7 +423,8 @@ export async function POST(request: NextRequest) {
         status: (document.processing as any)?.status || 'PENDING',
         url: urlData?.signedUrl,
         message: 'Document uploaded and basic processing completed successfully.',
-        processingStatus: 'BASIC_COMPLETED'
+        processingStatus: 'BASIC_COMPLETED',
+        vectorizationStatus
       });
       
     } catch (dbError) {
