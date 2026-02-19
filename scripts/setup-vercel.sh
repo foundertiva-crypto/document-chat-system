@@ -35,6 +35,7 @@
 #   --all               Add variables to all environments (default)
 #   --dry-run           Show what would be added without making changes
 #   --skip-sensitive    Skip sensitive variables (API keys, secrets)
+#   --non-interactive   Never prompt; fail if project is not linked
 #   --help              Show this help message
 #
 # Examples:
@@ -56,6 +57,7 @@ ENVIRONMENTS=()
 DRY_RUN=false
 SKIP_SENSITIVE=false
 ENV_FILE=".env.local"
+NON_INTERACTIVE=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -85,8 +87,16 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --env-file)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo -e "${RED}❌ --env-file requires a file path${NC}"
+                exit 1
+            fi
             ENV_FILE="$2"
             shift 2
+            ;;
+        --non-interactive)
+            NON_INTERACTIVE=true
+            shift
             ;;
         --help)
             grep '^#' "$0" | grep -v '#!/bin/bash' | sed 's/^# //' | sed 's/^#//'
@@ -141,6 +151,11 @@ if [ ! -d ".vercel" ]; then
     echo "Please link your Vercel project first:"
     echo -e "  ${GREEN}vercel link${NC}"
     echo ""
+    if [ "$NON_INTERACTIVE" = true ]; then
+        echo -e "${RED}❌ Non-interactive mode enabled; cannot continue without .vercel link${NC}"
+        exit 1
+    fi
+
     read -p "Press Enter to run 'vercel link' now, or Ctrl+C to exit..."
     vercel link
     echo ""
@@ -197,6 +212,15 @@ should_skip_value() {
         fi
     done
     return 1
+}
+
+trim_whitespace() {
+    local str="$1"
+    # Remove leading whitespace
+    str="${str#"${str%%[![:space:]]*}"}"
+    # Remove trailing whitespace
+    str="${str%"${str##*[![:space:]]}"}"
+    echo "$str"
 }
 
 # Function to add environment variable to Vercel
@@ -259,9 +283,18 @@ while IFS='=' read -r name value || [ -n "$name" ]; do
     # Skip empty lines and comments
     [[ -z "$name" || "$name" =~ ^[[:space:]]*# ]] && continue
 
-    # Remove leading/trailing whitespace
-    name=$(echo "$name" | xargs)
-    value=$(echo "$value" | xargs)
+    # Remove leading/trailing whitespace without touching inner spaces
+    name=$(trim_whitespace "$name")
+    value=$(trim_whitespace "$value")
+
+    # Support `export KEY=value` syntax
+    if [[ "$name" == export\ * ]]; then
+        name="${name#export }"
+        name=$(trim_whitespace "$name")
+    fi
+
+    # Normalize CRLF environment files
+    value="${value%$'\r'}"
 
     # Remove quotes from value if present
     value="${value%\"}"
