@@ -61,9 +61,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Validate input
+    const normalizedDocumentType = documentTypeParam || undefined;
     const inputValidation = uploadSchema.safeParse({ 
       organizationId,
-      documentType: documentTypeParam 
+      documentType: normalizedDocumentType 
     });
     if (!inputValidation.success) {
       console.error('❌ Input validation failed:', inputValidation.error.format());
