@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Header } from './header'
 import { Sidebar } from './sidebar'
@@ -33,7 +33,7 @@ export function AppLayout({ children, showNavigation = true }: AppLayoutProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Donation Banner - At the very top */}
       <DonationBanner onVisibilityChange={setDonationBannerVisible} />
 
@@ -47,7 +47,7 @@ export function AppLayout({ children, showNavigation = true }: AppLayoutProps) {
         />
 
         {/* Main content */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* Header */}
           <Header
             onMobileMenuToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -57,7 +57,7 @@ export function AppLayout({ children, showNavigation = true }: AppLayoutProps) {
 
           {/* Page content */}
           <main className="flex-1 overflow-y-auto">
-            <div className="container py-6">
+            <div className="mx-auto w-full max-w-7xl px-4 py-4 md:px-6 md:py-6">
               {children}
             </div>
           </main>
