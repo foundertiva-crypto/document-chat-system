@@ -23,9 +23,9 @@ export function Header({ onMobileMenuToggle, showNavigation = true, donationBann
   }, [])
 
   return (
-    <header className={`sticky ${donationBannerVisible ? 'top-[52px]' : 'top-0'} z-40 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300`}>
-      <div className="container">
-        <div className="flex h-16 items-center justify-between">
+    <header className={`sticky ${donationBannerVisible ? 'top[0px]' : 'top-0'} z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-all duration-300`}>
+      <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
+        <div className="flex h-16 items-center justify-between gap-3 md:gap-4">
           {/* Left side - Mobile menu only */}
           <div className="flex items-center gap-4">
             {onMobileMenuToggle && showNavigation && (

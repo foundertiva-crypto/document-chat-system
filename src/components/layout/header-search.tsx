@@ -103,7 +103,7 @@ export function HeaderSearch({ triggerOpen, onOpenChange }: HeaderSearchProps = 
   return (
     <>
       {/* Desktop Search Bar */}
-      <div className="hidden md:flex flex-1 max-w-lg mx-8">
+      <div className="hidden md:flex flex-1 max-w-lg mx-3 lg:mx-6">
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <Input
