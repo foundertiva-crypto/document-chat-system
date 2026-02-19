@@ -1185,12 +1185,6 @@ const envSchema = z.object({
     .describe(
       'API key for Pinecone vector database. Used for primary vector search and document embeddings. Required for vector search functionality.'
     ),
-  PINECONE_ENVIRONMENT: z
-    .string()
-    .default('us-east-1')
-    .describe(
-      'Pinecone environment/region. Used for Pinecone index connections. Default: us-east-1'
-    ),
   PINECONE_INDEX_NAME: z
     .string()
     .default('document-chat-index')
@@ -1293,7 +1287,6 @@ function validateEnv() {
       AI_RETRY_ATTEMPTS: 3,
       AI_RETRY_DELAY: 1000,
       PINECONE_API_KEY: '',
-      PINECONE_ENVIRONMENT: 'us-east1-gcp',
       PINECONE_INDEX_NAME: 'document-chat-index',
       PGVECTOR_CONNECTION_STRING: '',
       PGVECTOR_TABLE_NAME: 'embeddings',
@@ -1664,7 +1657,6 @@ export const development = {
 export const vectorDatabase = {
   pinecone: {
     apiKey: env.PINECONE_API_KEY,
-    environment: env.PINECONE_ENVIRONMENT,
     indexName: env.PINECONE_INDEX_NAME,
   },
   pgvector: {
