@@ -231,6 +231,12 @@ const DocumentsPageContent = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState(null);
   const [userOrganizationId, setUserOrganizationId] = useState<string | null>(null);
+  const [uploadSession, setUploadSession] = useState<{ visible: boolean; total: number; completed: number; files: Array<{ name: string; status: 'pending' | 'uploading' | 'success' | 'failed'; progress: number; error?: string }> }>({
+    visible: false,
+    total: 0,
+    completed: 0,
+    files: []
+  });
 
   // useRef hooks
   const fileInputRef = useRef(null);
@@ -1065,6 +1071,36 @@ const DocumentsPageContent = () => {
     setShowEditFolderDialog(false);
   }, [editingFolder, newFolderName, newFolderDescription, newFolderColor, updateFolder]);
 
+  const startUploadSession = useCallback((files: File[]) => {
+    setUploadSession({
+      visible: true,
+      total: files.length,
+      completed: 0,
+      files: files.map(file => ({ name: file.name, status: 'pending', progress: 0 }))
+    });
+  }, []);
+
+  const markUploadFileStatus = useCallback((fileName: string, status: 'uploading' | 'success' | 'failed', error?: string) => {
+    setUploadSession(prev => {
+      const files = prev.files.map(file =>
+        file.name === fileName
+          ? {
+              ...file,
+              status,
+              progress: status === 'uploading' ? 50 : 100,
+              error: error || file.error,
+            }
+          : file
+      );
+      const completed = files.filter(file => file.status === 'success' || file.status === 'failed').length;
+      return {
+        ...prev,
+        files,
+        completed,
+      };
+    });
+  }, []);
+
   const resolveOrganizationId = useCallback(async (): Promise<string | null> => {
     if (userOrganizationId) return userOrganizationId;
 
@@ -1113,8 +1149,11 @@ const DocumentsPageContent = () => {
       return;
     }
 
+    startUploadSession(uploadedFiles);
+
     for (const file of uploadedFiles) {
       try {
+        markUploadFileStatus(file.name, 'uploading');
         console.log(`🔄 Processing file: ${file.name} (${file.size} bytes)`)
         
         // Debug: Log current folder info
@@ -1132,6 +1171,7 @@ const DocumentsPageContent = () => {
         const validation = fileOps.validateFile(file)
         console.log('🔍 File validation result:', validation)
         if (!validation.isValid) {
+          markUploadFileStatus(file.name, 'failed', validation.error || 'Invalid file');
           console.error('❌ File validation failed:', validation.error)
           notify.error('Upload Failed', validation.error || 'Invalid file')
           continue
@@ -1157,6 +1197,7 @@ const DocumentsPageContent = () => {
           console.log('📤 Upload result:', uploadResult)
           
           if (!uploadResult.success) {
+            markUploadFileStatus(file.name, 'failed', uploadResult.error || 'Failed to upload file');
             console.error('❌ Upload failed:', uploadResult.error)
             console.error('❌ Full upload result:', uploadResult)
             notify.error('Upload Failed', uploadResult.error || 'Failed to upload file')
@@ -1253,6 +1294,7 @@ const DocumentsPageContent = () => {
 
         // Success notification
         notify.success('Upload Successful', `${file.name} has been uploaded successfully`)
+        markUploadFileStatus(file.name, 'success');
         
         // Play file drop sound effect for successful upload
         playSound(SoundEffect.FILE_DROP)
@@ -1366,6 +1408,7 @@ const DocumentsPageContent = () => {
         }, 3000) // Wait 3 seconds for processing to complete
 
       } catch (error) {
+        markUploadFileStatus(file.name, 'failed', error.message || 'Unknown error');
         console.error('❌ Upload error in handleFileUpload:', error)
         console.error('❌ Error details:', {
           message: error.message,
@@ -1392,7 +1435,7 @@ const DocumentsPageContent = () => {
         lastDocument: currentStore.documents.documents[currentStore.documents.documents.length - 1]
       })
     }
-  }, [currentFolderId, userOrganizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter, resolveOrganizationId])
+  }, [currentFolderId, userOrganizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter, resolveOrganizationId, startUploadSession, markUploadFileStatus])
 
   // File drop upload handler - now opens New Document modal
   const handleFileDropUpload = useCallback(async (files: FileList, targetFolderId: string) => {
@@ -1432,13 +1475,17 @@ const DocumentsPageContent = () => {
       // Multiple files - upload all files directly instead of forcing first-file modal flow
       notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Uploading all files...`);
 
+      startUploadSession(uploadedFiles);
+
       let successCount = 0;
       let failedCount = 0;
 
       for (const file of uploadedFiles) {
+        markUploadFileStatus(file.name, 'uploading');
         const validation = fileOps.validateFile(file);
         if (!validation.isValid) {
           failedCount++;
+          markUploadFileStatus(file.name, 'failed', validation.error || 'File type not supported');
           notify.error('Invalid File', `${file.name}: ${validation.error || 'File type not supported'}`);
           continue;
         }
@@ -1447,12 +1494,15 @@ const DocumentsPageContent = () => {
           const uploadResult = await storageOps.uploadFile(file, effectiveOrganizationId, targetFolderId || currentFolderId);
           if (uploadResult?.success) {
             successCount++;
+            markUploadFileStatus(file.name, 'success');
           } else {
             failedCount++;
+            markUploadFileStatus(file.name, 'failed', uploadResult?.error || 'Failed to upload file');
             notify.error('Upload Failed', `${file.name}: ${uploadResult?.error || 'Failed to upload file'}`);
           }
         } catch (error: any) {
           failedCount++;
+          markUploadFileStatus(file.name, 'failed', error?.message || 'Unknown error');
           notify.error('Upload Failed', `${file.name}: ${error?.message || 'Unknown error'}`);
         }
       }
@@ -1484,7 +1534,7 @@ const DocumentsPageContent = () => {
         notify.error('Upload Failed', 'All dropped files failed to upload.');
       }
     }
-  }, [fileOps, notify, storageOps, organizationId, userOrganizationId, currentFolderId, setDocuments, setUploadCounter, resolveOrganizationId]);
+  }, [fileOps, notify, storageOps, organizationId, userOrganizationId, currentFolderId, setDocuments, setUploadCounter, resolveOrganizationId, startUploadSession, markUploadFileStatus]);
 
   const handleSearchInput = useCallback((e) => {
     handleSearchChange(e.target.value);
@@ -2780,6 +2830,39 @@ const DocumentsPageContent = () => {
         data-folder-id={currentFolderId || UI_CONSTANTS.ROOT_FOLDER_ID}
       >
       {/* System Drag and Drop Overlay - Conditional display based on drag target */}
+      {uploadSession.visible && uploadSession.total > 0 && (
+        <div className="fixed bottom-4 right-4 w-[420px] max-w-[calc(100vw-2rem)] bg-background border rounded-lg shadow-xl z-50">
+          <div className="p-3 border-b flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Upload Session</p>
+              <p className="text-xs text-muted-foreground">{uploadSession.completed}/{uploadSession.total} completed</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setUploadSession(prev => ({ ...prev, visible: false }))}>Close</Button>
+          </div>
+          <div className="px-3 pt-2">
+            <div className="w-full h-2 rounded bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${uploadSession.total > 0 ? Math.round((uploadSession.completed / uploadSession.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+          <div className="max-h-64 overflow-auto p-3 space-y-2">
+            {uploadSession.files.map((file) => (
+              <div key={file.name} className="flex items-start justify-between gap-2 text-xs border rounded p-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{file.name}</p>
+                  {file.error && <p className="text-red-500 truncate">{file.error}</p>}
+                </div>
+                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
+                  {file.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isSystemDragOver && !isDragOverSpecificFolder && (
         <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="mx-4 border-2 border-dashed border-primary rounded-lg p-8 bg-background/95 shadow-2xl max-w-md">
