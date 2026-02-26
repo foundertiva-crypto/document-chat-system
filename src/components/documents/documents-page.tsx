@@ -63,7 +63,8 @@ import {
   Save,
   ExternalLink,
   Loader2,
-  Brain
+  Brain,
+  CheckSquare
 } from 'lucide-react'
 import { AuthenticatedImage } from '@/components/ui/authenticated-image'
 import { TreeUtils } from '@/lib/utils/tree-utils'
@@ -742,15 +743,48 @@ const DocumentsPageContent = () => {
     return processingStatus === 'COMPLETED' && document.analysis?.content?.extractedText;
   }, []);
   
-  // Select all processed documents - only documents ready for AI analysis
+  // Select all documents in current view
   const selectAllDocuments = useCallback(() => {
-    const processedDocumentIds = new Set(
-      currentDocuments
-        .filter(doc => isDocumentReadyForAnalysis(doc))
-        .map(doc => doc.id)
+    const allDocumentIds = new Set(currentDocuments.map(doc => doc.id));
+    setSelectedDocuments(allDocumentIds);
+  }, [currentDocuments]);
+
+  const handleBulkDeleteDocuments = useCallback(async () => {
+    if (selectedDocuments.size === 0) {
+      notify.info('No Selection', 'Please select documents to delete');
+      return;
+    }
+
+    const selectedDocs = currentDocuments.filter(doc => selectedDocuments.has(doc.id));
+    const confirmed = window.confirm(
+      `Delete ${selectedDocs.length} selected ${selectedDocs.length === 1 ? 'document' : 'documents'}? This action cannot be undone.`
     );
-    setSelectedDocuments(processedDocumentIds);
-  }, [currentDocuments, isDocumentReadyForAnalysis]);
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    let deletedCount = 0;
+
+    for (const doc of selectedDocs) {
+      const result = await deleteDocument(doc.id);
+      if (result.success) {
+        deletedCount += 1;
+      }
+    }
+
+    setIsDeleting(false);
+    clearSelection();
+    setIsBulkActionMode(false);
+
+    if (deletedCount === selectedDocs.length) {
+      notify.success('Documents Deleted', `Deleted ${deletedCount} ${deletedCount === 1 ? 'document' : 'documents'}.`);
+    } else {
+      notify.warning(
+        'Partial Delete',
+        `Deleted ${deletedCount} of ${selectedDocs.length} selected documents. Please retry failed deletes.`
+      );
+    }
+  }, [selectedDocuments, currentDocuments, notify, deleteDocument, clearSelection]);
   
   // Handle bulk AI analysis
   const handleBulkAIAnalysis = useCallback(async () => {
@@ -2955,8 +2989,45 @@ const DocumentsPageContent = () => {
               <span className="hidden sm:inline ml-1">New Document</span>
             </Button>
 
+            {currentDocuments.length > 0 && (
+              <Button
+                variant={isBulkActionMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={toggleBulkActionMode}
+                className="h-8 md:h-9 px-2 md:px-3"
+              >
+                <CheckSquare size={16} className="md:w-[18px] md:h-[18px]" />
+                <span className="hidden sm:inline ml-1">Bulk Select</span>
+              </Button>
+            )}
+
           </div>
         </div>
+
+        {isBulkActionMode && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2">
+            <Badge variant="secondary">{selectedDocuments.size} selected</Badge>
+            <Button variant="outline" size="sm" onClick={selectAllDocuments}>Select All</Button>
+            <Button variant="outline" size="sm" onClick={clearSelection}>Clear</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkAIAnalysis}
+              disabled={selectedDocuments.size === 0 || isAnalyzing}
+            >
+              <Brain size={14} className="mr-1" /> Analyze Selected
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDeleteDocuments}
+              disabled={selectedDocuments.size === 0 || isDeleting}
+            >
+              <Trash2 size={14} className="mr-1" /> Delete Selected
+            </Button>
+            <Button variant="ghost" size="sm" onClick={toggleBulkActionMode}>Done</Button>
+          </div>
+        )}
 
         {/* Controls Bar */}
         <div className="flex items-center justify-between gap-2">
@@ -3409,13 +3480,11 @@ const DocumentsPageContent = () => {
                       key={`${document.id}-${document.folderId || UI_CONSTANTS.ROOT_FOLDER_ID}`}
                       className={`bg-card border rounded-lg p-4 hover:shadow-md transition-shadow ${
                         selectedDocuments.has(document.id) ? 'ring-2 ring-primary' : ''
-                      } ${
-                        isBulkActionMode && !isDocumentReadyForAnalysis(document) ? 'opacity-50' : ''
-                      }`}
+                      } `}
                     >
                       <div className="flex items-center gap-4">
                         {/* Selection Checkbox for search results */}
-                        {isBulkActionMode && isDocumentReadyForAnalysis(document) && (
+                        {isBulkActionMode && (
                           <div className="flex-shrink-0">
                             <input
                               type="checkbox"
@@ -3761,16 +3830,14 @@ const DocumentsPageContent = () => {
                                 : ''
                             } ${
                               selectedDocuments.has(document.id) ? 'ring-2 ring-primary shadow-primary/25' : ''
-                            } ${
-                              isBulkActionMode && !isDocumentReadyForAnalysis(document) ? 'opacity-40' : ''
-                            }`}
+                            } `}
                             draggable={!isBulkActionMode}
                             onDragStart={(e) => !isBulkActionMode && handleDocumentDragStart(e, document)}
                             onDragEnd={handleDragEnd}
                             style={{ cursor: isBulkActionMode ? 'pointer' : (draggedDocument?.id === document.id ? 'grabbing' : 'grab') }}
                           >
                             {/* Selection Checkbox */}
-                            {isBulkActionMode && isDocumentReadyForAnalysis(document) && (
+                            {isBulkActionMode && (
                               <div className="absolute top-2 left-2 z-10">
                                 <input
                                   type="checkbox"
@@ -3787,9 +3854,7 @@ const DocumentsPageContent = () => {
                               onClick={(e) => {
                                 if (isBulkActionMode) {
                                   e.preventDefault();
-                                  if (isDocumentReadyForAnalysis(document)) {
-                                    toggleDocumentSelection(document.id);
-                                  }
+                                  toggleDocumentSelection(document.id);
                                 }
                               }}
                             >
@@ -4059,9 +4124,7 @@ const DocumentsPageContent = () => {
                                 : ''
                             } ${
                               selectedDocuments.has(document.id) ? 'bg-primary/5' : ''
-                            } ${
-                              isBulkActionMode && !isDocumentReadyForAnalysis(document) ? 'opacity-40' : ''
-                            }`}
+                            } `}
                             draggable={!isBulkActionMode}
                             onDragStart={(e) => !isBulkActionMode && handleDocumentDragStart(e, document)}
                             onDragEnd={handleDragEnd}
@@ -4073,14 +4136,12 @@ const DocumentsPageContent = () => {
                               onClick={(e) => {
                                 if (isBulkActionMode) {
                                   e.preventDefault();
-                                  if (isDocumentReadyForAnalysis(document)) {
-                                    toggleDocumentSelection(document.id);
-                                  }
+                                  toggleDocumentSelection(document.id);
                                 }
                               }}
                             >
                               {/* Selection Checkbox */}
-                              {isBulkActionMode && isDocumentReadyForAnalysis(document) && (
+                              {isBulkActionMode && (
                                 <div className="flex-shrink-0">
                                   <input
                                     type="checkbox"
