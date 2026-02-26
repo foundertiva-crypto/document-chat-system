@@ -111,6 +111,7 @@ export class EmbeddingService {
       const embeddingChunks: DocumentEmbeddings['chunks'] = []
       let failedBatches = 0
       const failedChunkIds: string[] = []
+      const failedBatchErrors: string[] = []
 
       console.log(
         `📦 Processing ${chunks.length} chunks in batches of ${this.config.batchSize}...`
@@ -118,98 +119,116 @@ export class EmbeddingService {
 
       for (let i = 0; i < chunks.length; i += this.config.batchSize) {
         const batch = chunks.slice(i, i + this.config.batchSize)
+        const batchNumber = Math.floor(i / this.config.batchSize) + 1
+        const totalBatches = Math.ceil(chunks.length / this.config.batchSize)
 
-        try {
-          const batchNumber = Math.floor(i / this.config.batchSize) + 1
-          const totalBatches = Math.ceil(chunks.length / this.config.batchSize)
-          
-          console.log(
-            `🔄 Processing batch ${batchNumber}/${totalBatches} (chunks ${i + 1}-${Math.min(i + this.config.batchSize, chunks.length)})`
-          )
+        console.log(
+          `🔄 Processing batch ${batchNumber}/${totalBatches} (chunks ${i + 1}-${Math.min(i + this.config.batchSize, chunks.length)})`
+        )
 
-          // Progress callback for current batch
-          if (progressCallback) {
-            const progress = Math.round((i / chunks.length) * 70) + 30 // 30-100% progress range
-            await progressCallback(
-              `Processing batch ${batchNumber}/${totalBatches}...`,
-              progress,
-              i,
-              chunks.length
-            )
-          }
-
-        // Generate embeddings for batch with timeout
-        console.log(`🧮 Generating embeddings for batch...`)
-        const embeddings = await Promise.race([
-          this.generateBatchEmbeddings(batch.map((chunk) => chunk.content)),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Embedding generation timeout after 60s')), 60000)
-          )
-        ]) as number[][]
-        console.log(`✅ Generated ${embeddings.length} embeddings for batch`)
-
-        // Prepare dense vectors for Pinecone
-        const vectors = batch.map((chunk, idx) => ({
-          id: `${document.organizationId}_${chunk.id}`, // Prefix with org for isolation
-          values: embeddings[idx], // Use values for dense vectors
-          metadata: this.createPineconeMetadata(
-            chunk,
-            document,
-            organizationNamespace
-          ),
-        }))
-
-        // Validate that we have the expected number of vectors
-        if (vectors.length !== batch.length) {
-          throw new Error(
-            `Vector count mismatch: expected ${batch.length}, got ${vectors.length}`
+        // Progress callback for current batch
+        if (progressCallback) {
+          const progress = Math.round((i / chunks.length) * 70) + 30 // 30-100% progress range
+          await progressCallback(
+            `Processing batch ${batchNumber}/${totalBatches}...`,
+            progress,
+            i,
+            chunks.length
           )
         }
 
-        // Upsert to Pinecone namespace with timeout protection
-        console.log(
-          `📡 Upserting ${vectors.length} vectors to Pinecone namespace: ${organizationNamespace}...`
-        )
-        const upsertResponse = await Promise.race([
-          namespacedIndex.upsert(vectors),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Pinecone upsert timeout after 30s')), 30000)
-          )
-        ])
-        console.log(
-          `✅ Successfully upserted vectors to Pinecone:`,
-          upsertResponse
-        )
+        const maxAttempts = 2
+        let batchProcessed = false
+        let lastBatchError: unknown = null
 
-        // Store references in our format with validation
-        batch.forEach((chunk, idx) => {
-          if (!vectors[idx]) {
-            throw new Error(`Missing vector for chunk ${idx}: ${chunk.id}`)
+        for (let attempt = 1; attempt <= maxAttempts && !batchProcessed; attempt++) {
+          try {
+            if (attempt > 1) {
+              console.warn(`🔁 Retrying batch ${batchNumber}/${totalBatches} (attempt ${attempt}/${maxAttempts})`)
+            }
+
+            // Generate embeddings for batch with timeout
+            console.log(`🧮 Generating embeddings for batch...`)
+            const embeddings = await Promise.race([
+              this.generateBatchEmbeddings(batch.map((chunk) => chunk.content)),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Embedding generation timeout after 60s')), 60000)
+              )
+            ]) as number[][]
+            console.log(`✅ Generated ${embeddings.length} embeddings for batch`)
+
+            // Prepare dense vectors for Pinecone
+            const vectors = batch.map((chunk, idx) => ({
+              id: `${document.organizationId}_${chunk.id}`, // Prefix with org for isolation
+              values: embeddings[idx], // Use values for dense vectors
+              metadata: this.createPineconeMetadata(
+                chunk,
+                document,
+                organizationNamespace
+              ),
+            }))
+
+            // Validate that we have the expected number of vectors
+            if (vectors.length !== batch.length) {
+              throw new Error(
+                `Vector count mismatch: expected ${batch.length}, got ${vectors.length}`
+              )
+            }
+
+            // Upsert to Pinecone namespace with timeout protection
+            console.log(
+              `📡 Upserting ${vectors.length} vectors to Pinecone namespace: ${organizationNamespace}...`
+            )
+            const upsertResponse = await Promise.race([
+              namespacedIndex.upsert(vectors),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Pinecone upsert timeout after 30s')), 30000)
+              )
+            ])
+            console.log(
+              `✅ Successfully upserted vectors to Pinecone:`,
+              upsertResponse
+            )
+
+            // Store references in our format with validation
+            batch.forEach((chunk, idx) => {
+              if (!vectors[idx]) {
+                throw new Error(`Missing vector for chunk ${idx}: ${chunk.id}`)
+              }
+
+              embeddingChunks.push({
+                id: chunk.id,
+                chunkIndex: chunk.chunkIndex,
+                vectorId: vectors[idx].id,
+                content: chunk.content, // Store full chunk content in database
+                startChar: chunk.startChar,
+                endChar: chunk.endChar,
+                keywords: chunk.keywords,
+              })
+
+              console.log(
+                `📋 Stored embedding reference for chunk ${chunk.chunkIndex}: ${chunk.id} -> ${vectors[idx].id}`
+              )
+            })
+
+            batchProcessed = true
+          } catch (batchError) {
+            lastBatchError = batchError
+
+            if (attempt < maxAttempts) {
+              continue
+            }
           }
+        }
 
-          embeddingChunks.push({
-            id: chunk.id,
-            chunkIndex: chunk.chunkIndex,
-            vectorId: vectors[idx].id,
-            content: chunk.content, // Store full chunk content in database
-            startChar: chunk.startChar,
-            endChar: chunk.endChar,
-            keywords: chunk.keywords,
-          })
-
-          console.log(
-            `📋 Stored embedding reference for chunk ${chunk.chunkIndex}: ${chunk.id} -> ${vectors[idx].id}`
-          )
-        })
-        } catch (batchError) {
-          const batchNumber = Math.floor(i / this.config.batchSize) + 1
-          const errorMessage = batchError instanceof Error ? batchError.message : 'Unknown error'
-
-          console.error(`❌ Batch ${batchNumber} processing failed:`, batchError)
+        if (!batchProcessed) {
+          const errorMessage = lastBatchError instanceof Error ? lastBatchError.message : 'Unknown error'
+          console.error(`❌ Batch ${batchNumber} processing failed after retries:`, lastBatchError)
 
           // Track failed batch for reporting
           failedBatches++
           failedChunkIds.push(...batch.map(c => c.id))
+          failedBatchErrors.push(`Batch ${batchNumber}: ${errorMessage}`)
 
           // Send progress callback with error
           if (progressCallback) {
@@ -223,7 +242,7 @@ export class EmbeddingService {
 
           // Log the failure but continue processing remaining batches
           console.warn(`⚠️ Continuing with remaining batches. Failed batch ${batchNumber} will be retried later.`)
-          continue; // Continue to next batch instead of throwing
+          continue // Continue to next batch instead of throwing
         }
       }
 
@@ -241,9 +260,14 @@ export class EmbeddingService {
 
         // If more than 50% of batches failed, throw error
         if (failedBatches > totalBatches / 2) {
+          const details = failedBatchErrors.length > 0
+            ? ` Root cause(s): ${failedBatchErrors.join(' | ')}`
+            : ''
+
           throw new Error(
             `Embedding generation critically failed: ${failedBatches}/${totalBatches} batches failed. ` +
-            `Only ${successfulChunks}/${chunks.length} chunks processed successfully.`
+            `Only ${successfulChunks}/${chunks.length} chunks processed successfully.` +
+            details
           )
         }
       } else {
