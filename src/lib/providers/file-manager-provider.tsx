@@ -60,7 +60,6 @@ interface FileManagerProviderProps {
 export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ children }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const TRANSPORT_MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB safe limit for serverless multipart payloads
 
   // File Operations
   const fileOps: FileOperations = {
@@ -162,14 +161,6 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
         const validation = fileOps.validateFile(file);
         if (!validation.isValid) {
           return { success: false, error: validation.error };
-        }
-
-        // Prevent platform-level 413 errors before the request is sent.
-        if (file.size > TRANSPORT_MAX_FILE_SIZE_BYTES) {
-          return {
-            success: false,
-            error: `Request entity too large for direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB). Max allowed is ${(TRANSPORT_MAX_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0)}MB per file. Please upload smaller files.`
-          };
         }
 
         // Simulate upload progress
