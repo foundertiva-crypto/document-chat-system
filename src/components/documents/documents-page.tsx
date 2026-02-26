@@ -1498,12 +1498,14 @@ const DocumentsPageContent = () => {
           } else {
             failedCount++;
             markUploadFileStatus(file.name, 'failed', uploadResult?.error || 'Failed to upload file');
-            notify.error('Upload Failed', `${file.name}: ${uploadResult?.error || 'Failed to upload file'}`);
+            const errorMessage = uploadResult?.error || 'Failed to upload file';
+            notify.error(errorMessage.includes('413') ? 'File Too Large' : 'Upload Failed', `${file.name}: ${errorMessage}`);
           }
         } catch (error: any) {
           failedCount++;
           markUploadFileStatus(file.name, 'failed', error?.message || 'Unknown error');
-          notify.error('Upload Failed', `${file.name}: ${error?.message || 'Unknown error'}`);
+          const errorMessage = error?.message || 'Unknown error';
+          notify.error(errorMessage.includes('413') ? 'File Too Large' : 'Upload Failed', `${file.name}: ${errorMessage}`);
         }
       }
 

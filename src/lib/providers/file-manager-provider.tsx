@@ -60,6 +60,7 @@ interface FileManagerProviderProps {
 export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ children }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const TRANSPORT_MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024; // 4MB safe limit for serverless multipart payloads
 
   // File Operations
   const fileOps: FileOperations = {
@@ -163,6 +164,14 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
           return { success: false, error: validation.error };
         }
 
+        // Prevent platform-level 413 errors before the request is sent.
+        if (file.size > TRANSPORT_MAX_FILE_SIZE_BYTES) {
+          return {
+            success: false,
+            error: `Request entity too large for direct upload (${(file.size / 1024 / 1024).toFixed(1)}MB). Max allowed is ${(TRANSPORT_MAX_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0)}MB per file. Please upload smaller files.`
+          };
+        }
+
         // Simulate upload progress
         for (let i = 0; i <= 100; i += 10) {
           setUploadProgress(i);
@@ -180,16 +189,30 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
           body: formData
         });
 
-        const result = await response.json();
+        const contentType = response.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        const result = isJson ? await response.json() : null;
         
         if (!response.ok) {
+          if (response.status === 413) {
+            return {
+              success: false,
+              error: 'Request Entity Too Large (413). Please reduce file size or upload files individually.'
+            };
+          }
+
+          if (!isJson) {
+            const textError = await response.text().catch(() => 'Upload failed');
+            return { success: false, error: textError || `Upload failed (${response.status})` };
+          }
+
           return { success: false, error: result.error || 'Upload failed' };
         }
 
         return { success: true, data: result };
       } catch (error) {
         console.error('Upload error:', error);
-        return { success: false, error: 'Upload failed' };
+        return { success: false, error: error instanceof Error ? error.message : 'Upload failed' };
       } finally {
         setIsUploading(false);
         setUploadProgress(0);
