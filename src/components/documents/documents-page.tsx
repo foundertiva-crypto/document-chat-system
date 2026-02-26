@@ -289,7 +289,7 @@ const DocumentsPageContent = () => {
     console.log('📁 [FOLDER STATE] currentFolderId changed to:', currentFolderId)
   }, [currentFolderId])
   
-  // Fetch INTERNAL organization ID from backend profile API
+  // Fetch INTERNAL organization ID from backend APIs
   // NOTE: Do not use Clerk org IDs for upload APIs; backend expects DB organizationId
   useEffect(() => {
     const fetchUserOrganization = async () => {
@@ -299,6 +299,17 @@ const DocumentsPageContent = () => {
           const profileData = await response.json()
           if (profileData.success && profileData.data?.organizationId) {
             setUserOrganizationId(profileData.data.organizationId)
+            return
+          }
+        }
+
+        // Fallback: user endpoint contains organization object with internal DB id
+        const userResponse = await fetch('/api/v1/user')
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          const fallbackOrgId = userData?.data?.organization?.id
+          if (fallbackOrgId) {
+            setUserOrganizationId(fallbackOrgId)
           }
         }
       } catch (error) {
@@ -316,13 +327,14 @@ const DocumentsPageContent = () => {
   // Internal DB organization ID used by upload APIs
   const organizationId = userOrganizationId
 
-  // Load documents and folders data when organization ID becomes available
+  // Load documents and folders data after auth is ready.
+  // API routes already enforce organization scoping server-side.
   const hasLoadedDataRef = useRef(false)
   
   useEffect(() => {
     const loadDocumentsData = async () => {
       // Prevent multiple loads
-      if (!organizationId || hasLoadedDataRef.current) {
+      if (!isSignedIn || !authLoaded || !userLoaded || hasLoadedDataRef.current) {
         return;
       }
 
@@ -331,7 +343,7 @@ const DocumentsPageContent = () => {
         return;
       }
 
-      console.log('🔄 Loading documents and folders data for org:', organizationId);
+      console.log('🔄 Loading documents and folders data for org:', organizationId || 'unknown');
       hasLoadedDataRef.current = true; // Mark as loading to prevent duplicates
       setLoading(true);
 
@@ -400,7 +412,7 @@ const DocumentsPageContent = () => {
     };
 
     loadDocumentsData();
-  }, [organizationId]); // Only depend on organizationId
+  }, [isSignedIn, authLoaded, userLoaded, organizationId]);
 
   // For debugging: Log when documents are loaded
   React.useEffect(() => {
