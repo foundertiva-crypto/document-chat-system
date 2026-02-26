@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { supabaseAdmin } from '@/lib/supabase';
 import { uploadToLocal } from '@/lib/local-storage';
@@ -15,12 +14,6 @@ const ALLOWED_TYPES = [
   'image/jpg' // Additional type
 ];
 
-const uploadSchema = z.object({
-  documentType: z.string().optional()
-    .describe("Optional document type classification. Invalid values are tolerated and normalized to OTHER.")
-})
-  .describe("Schema for validating document upload requests. Ensures upload payload shape without rejecting bulk uploads due to optional metadata values.");
-
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
@@ -34,7 +27,8 @@ export async function POST(request: NextRequest) {
     const requestedOrganizationId = formData.get('organizationId') as string | null;
     const folderId = formData.get('folderId') as string | null;
     const tagsParam = formData.get('tags') as string | null;
-    const documentTypeParam = formData.get('documentType') as string | null;
+    const documentTypeRaw = formData.get('documentType');
+    const documentTypeParam = typeof documentTypeRaw === 'string' ? documentTypeRaw : null;
     
     // Parse tags if provided
     let tags: string[] = [];
@@ -58,21 +52,8 @@ export async function POST(request: NextRequest) {
       userId
     });
 
-    // Validate input
-    const inputValidation = uploadSchema.safeParse({ 
-      documentType: documentTypeParam 
-    });
-    const normalizedDocumentTypeParam = (inputValidation.success ? inputValidation.data.documentType : documentTypeParam) || null;
-    if (!inputValidation.success) {
-      console.error('❌ Input validation failed:', inputValidation.error.format());
-      return NextResponse.json(
-        { 
-          error: 'Invalid input format',
-          details: inputValidation.error.format()
-        },
-        { status: 400 }
-      );
-    }
+    // Normalize optional metadata without rejecting upload
+    const normalizedDocumentTypeParam = (documentTypeParam || '').trim() || null;
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
