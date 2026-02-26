@@ -1073,6 +1073,14 @@ const DocumentsPageContent = () => {
     const ENABLE_REAL_UPLOADS = true
     console.log('⚙️ ENABLE_REAL_UPLOADS:', ENABLE_REAL_UPLOADS)
     
+    const uploadOrganizationId = userOrganizationId || null;
+
+    if (!uploadOrganizationId) {
+      notify.error('Upload Failed', 'Organization is still loading. Please wait a moment and try again.');
+      event.target.value = '';
+      return;
+    }
+
     for (const file of uploadedFiles) {
       try {
         console.log(`🔄 Processing file: ${file.name} (${file.size} bytes)`)
@@ -1108,12 +1116,12 @@ const DocumentsPageContent = () => {
             fileName: file.name,
             fileSize: file.size,
             fileType: file.type,
-            organizationId,
+            organizationId: uploadOrganizationId,
             folderId: currentFolderId
           })
           
           // Real upload to Supabase storage
-          uploadResult = await storageOps.uploadFile(file, organizationId, currentFolderId)
+          uploadResult = await storageOps.uploadFile(file, uploadOrganizationId, currentFolderId)
           console.log('📤 Upload result:', uploadResult)
           
           if (!uploadResult.success) {
@@ -1263,7 +1271,7 @@ const DocumentsPageContent = () => {
           fileSize: file.size,
           fileType: file.type,
           targetFolderId: currentFolderId,
-          organizationId,
+          organizationId: uploadOrganizationId,
           uploadResult: uploadResult.data,
           documentId: realDocument.id,
           beforeState: {
@@ -1352,12 +1360,12 @@ const DocumentsPageContent = () => {
         lastDocument: currentStore.documents.documents[currentStore.documents.documents.length - 1]
       })
     }
-  }, [currentFolderId, organizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter])
+  }, [currentFolderId, userOrganizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter])
 
   // File drop upload handler - now opens New Document modal
   const handleFileDropUpload = useCallback(async (files: FileList, targetFolderId: string) => {
     const uploadedFiles = Array.from(files);
-    const effectiveOrganizationId = organizationId || userOrganizationId;
+    const effectiveOrganizationId = userOrganizationId || null;
     
     console.log('📁 Processing dropped files:', {
       fileCount: uploadedFiles.length,
