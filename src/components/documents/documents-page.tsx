@@ -1437,7 +1437,7 @@ const DocumentsPageContent = () => {
         notify.error('Upload Failed', 'All dropped files failed to upload.');
       }
     }
-  }, [fileOps, notify, storageOps, organizationId, targetFolderId, currentFolderId, setDocuments, setUploadCounter]);
+  }, [fileOps, notify, storageOps, organizationId, currentFolderId, setDocuments, setUploadCounter]);
 
   const handleSearchInput = useCallback((e) => {
     handleSearchChange(e.target.value);
