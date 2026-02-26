@@ -16,8 +16,6 @@ const ALLOWED_TYPES = [
 ];
 
 const uploadSchema = z.object({
-  organizationId: z.string().min(1)
-    .describe("Organization identifier for document access control and isolation. Must be a valid organization ID that the user has access to. Used for multi-tenant document management."),
   documentType: z.enum(['PROPOSAL', 'CONTRACT', 'CERTIFICATION', 'COMPLIANCE', 'TEMPLATE', 'OTHER', 'SOLICITATION', 'AMENDMENT', 'CAPABILITY_STATEMENT', 'PAST_PERFORMANCE']).optional()
     .describe("Document type classification. Must be one of the predefined DocumentType enum values.")
 })
@@ -33,7 +31,7 @@ export async function POST(request: NextRequest) {
     // Parse form data
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const organizationId = formData.get('organizationId') as string;
+    const requestedOrganizationId = formData.get('organizationId') as string | null;
     const folderId = formData.get('folderId') as string | null;
     const tagsParam = formData.get('tags') as string | null;
     const documentTypeParam = formData.get('documentType') as string | null;
@@ -53,7 +51,7 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
-      organizationId,
+      requestedOrganizationId,
       folderId,
       tags,
       documentType: documentTypeParam,
@@ -62,7 +60,6 @@ export async function POST(request: NextRequest) {
 
     // Validate input
     const inputValidation = uploadSchema.safeParse({ 
-      organizationId,
       documentType: documentTypeParam 
     });
     if (!inputValidation.success) {
@@ -112,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     console.log('🔍 Upload authorization debug:', {
       clerkUserId: userId,
-      requestOrgId: organizationId,
+      requestOrgId: requestedOrganizationId,
       userFromDB: user ? { id: user.id, organizationId: user.organizationId, email: user.email } : null,
       userExists: !!user,
       userIdType: typeof user?.id
@@ -141,23 +138,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Allow access to default organization or user's assigned organization
-    const hasAccess = user.organizationId === organizationId || 
-                     (organizationId === 'default' && user.organizationId);
+    // Always use internal DB organization ID from authenticated user.
+    // Client-provided organization IDs can be stale or from external identity providers.
+    const organizationId = user.organizationId;
 
-    if (!hasAccess) {
-      console.error('❌ Organization access denied:', {
-        userOrgId: user.organizationId,
-        requestOrgId: organizationId,
-        isDefault: organizationId === 'default'
+    if (requestedOrganizationId && requestedOrganizationId !== organizationId) {
+      console.warn('⚠️ Upload request organizationId mismatch, using authenticated user organizationId instead:', {
+        requestedOrganizationId,
+        resolvedOrganizationId: organizationId,
+        userId: user.id
       });
-      return NextResponse.json(
-        { 
-          error: 'Access denied to organization',
-          details: `User belongs to organization '${user.organizationId}' but trying to access '${organizationId}'`
-        },
-        { status: 403 }
-      );
     }
 
     // Generate unique file ID and path with new structure
