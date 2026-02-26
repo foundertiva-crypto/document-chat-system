@@ -1382,20 +1382,62 @@ const DocumentsPageContent = () => {
       console.log('📄 Opening New Document modal with file:', file.name);
       
     } else if (uploadedFiles.length > 1) {
-      // Multiple files - show notification and open modal for first file
-      notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Processing first file. Upload others individually.`);
-      
-      const firstFile = uploadedFiles[0];
-      const validation = fileOps.validateFile(firstFile);
-      if (!validation.isValid) {
-        notify.error('Invalid File', validation.error || 'File type not supported');
-        return;
+      // Multiple files - upload all files directly instead of forcing first-file modal flow
+      notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Uploading all files...`);
+
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (const file of uploadedFiles) {
+        const validation = fileOps.validateFile(file);
+        if (!validation.isValid) {
+          failedCount++;
+          notify.error('Invalid File', `${file.name}: ${validation.error || 'File type not supported'}`);
+          continue;
+        }
+
+        try {
+          const uploadResult = await storageOps.uploadFile(file, organizationId, targetFolderId || currentFolderId);
+          if (uploadResult?.success) {
+            successCount++;
+          } else {
+            failedCount++;
+            notify.error('Upload Failed', `${file.name}: ${uploadResult?.error || 'Failed to upload file'}`);
+          }
+        } catch (error: any) {
+          failedCount++;
+          notify.error('Upload Failed', `${file.name}: ${error?.message || 'Unknown error'}`);
+        }
       }
 
-      setDraggedFileForModal(firstFile);
-      setShowCreateDocumentModal(true);
+      // Refresh documents list so all uploaded files appear in folder view
+      try {
+        const documentsResponse = await fetch('/api/v1/documents', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+
+        if (documentsResponse.ok) {
+          const documentsData = await documentsResponse.json();
+          if (documentsData.success && documentsData.documents) {
+            setDocuments(documentsData.documents);
+            setUploadCounter(prev => prev + 1);
+          }
+        }
+      } catch (refreshError) {
+        console.error('❌ Failed to refresh documents after multi-file drop:', refreshError);
+      }
+
+      if (successCount > 0) {
+        notify.success('Upload Complete', `${successCount} file(s) uploaded successfully${failedCount > 0 ? `, ${failedCount} failed` : ''}.`);
+      }
+
+      if (failedCount > 0 && successCount === 0) {
+        notify.error('Upload Failed', 'All dropped files failed to upload.');
+      }
     }
-  }, [fileOps, notify]);
+  }, [fileOps, notify, storageOps, organizationId, targetFolderId, currentFolderId, setDocuments, setUploadCounter]);
 
   const handleSearchInput = useCallback((e) => {
     handleSearchChange(e.target.value);
