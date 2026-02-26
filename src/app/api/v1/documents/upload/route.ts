@@ -30,6 +30,10 @@ export async function POST(request: NextRequest) {
     const documentTypeRaw = formData.get('documentType');
     const documentTypeParam = typeof documentTypeRaw === 'string' ? documentTypeRaw : null;
     
+    if (!file) {
+      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    }
+
     // Parse tags if provided
     let tags: string[] = [];
     if (tagsParam) {
@@ -54,10 +58,6 @@ export async function POST(request: NextRequest) {
 
     // Normalize optional metadata without rejecting upload
     const normalizedDocumentTypeParam = (documentTypeParam || '').trim() || null;
-
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
-    }
 
     // Enhanced file validation with extension fallback
     console.log(`[API DEBUG] Upload attempt - File: ${file.name}, Type: "${file.type}", Size: ${file.size} bytes`);
@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
 
     // Upload to storage (Supabase if configured, otherwise local)
     let uploadData = null;
+    let uploadedToStorage = false;
     let storageUrl: string;
 
     if (supabaseAdmin) {
@@ -169,6 +170,7 @@ export async function POST(request: NextRequest) {
         );
       }
       uploadData = data;
+      uploadedToStorage = true;
 
       // Update filePath with the actual path returned by Supabase
       filePath = data.path;
@@ -196,6 +198,7 @@ export async function POST(request: NextRequest) {
 
       filePath = localResult.path || filePath;
       storageUrl = localResult.url || `/uploads/${fileName}`;
+      uploadedToStorage = true;
       console.log('✅ File uploaded to local storage:', storageUrl);
     }
 
@@ -368,6 +371,18 @@ export async function POST(request: NextRequest) {
       } else if (dbError.message?.includes('violates check constraint')) {
         errorMessage = 'Invalid document type or other field value';
         errorDetails = 'Please check your input and try again';
+      }
+
+      // Best-effort cleanup to avoid orphaned storage files when DB write fails
+      if (uploadedToStorage && filePath) {
+        try {
+          if (supabaseAdmin) {
+            await supabaseAdmin.storage.from('documents').remove([filePath]);
+            console.log('🧹 Cleaned up orphaned storage file after DB error:', filePath);
+          }
+        } catch (cleanupError) {
+          console.error('⚠️ Failed to cleanup orphaned storage file:', { filePath, cleanupError });
+        }
       }
 
       return NextResponse.json(
