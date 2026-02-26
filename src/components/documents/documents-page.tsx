@@ -1065,6 +1065,36 @@ const DocumentsPageContent = () => {
     setShowEditFolderDialog(false);
   }, [editingFolder, newFolderName, newFolderDescription, newFolderColor, updateFolder]);
 
+  const resolveOrganizationId = useCallback(async (): Promise<string | null> => {
+    if (userOrganizationId) return userOrganizationId;
+
+    try {
+      const userResponse = await fetch('/api/v1/user', { credentials: 'include' });
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        const orgId = userData?.data?.organization?.id;
+        if (orgId) {
+          setUserOrganizationId(orgId);
+          return orgId;
+        }
+      }
+
+      const profileResponse = await fetch('/api/v1/profile', { credentials: 'include' });
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        const orgId = profileData?.data?.organizationId;
+        if (orgId) {
+          setUserOrganizationId(orgId);
+          return orgId;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to resolve organization ID on demand:', error);
+    }
+
+    return null;
+  }, [userOrganizationId]);
+
   // File upload handler with future Supabase support
   const handleFileUpload = useCallback(async (event) => {
     console.log('🚀 handleFileUpload called!')
@@ -1075,7 +1105,7 @@ const DocumentsPageContent = () => {
     const ENABLE_REAL_UPLOADS = true
     console.log('⚙️ ENABLE_REAL_UPLOADS:', ENABLE_REAL_UPLOADS)
     
-    const uploadOrganizationId = userOrganizationId || null;
+    const uploadOrganizationId = userOrganizationId || await resolveOrganizationId();
 
     if (!uploadOrganizationId) {
       notify.error('Upload Failed', 'Organization is still loading. Please wait a moment and try again.');
@@ -1362,12 +1392,12 @@ const DocumentsPageContent = () => {
         lastDocument: currentStore.documents.documents[currentStore.documents.documents.length - 1]
       })
     }
-  }, [currentFolderId, userOrganizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter])
+  }, [currentFolderId, userOrganizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter, resolveOrganizationId])
 
   // File drop upload handler - now opens New Document modal
   const handleFileDropUpload = useCallback(async (files: FileList, targetFolderId: string) => {
     const uploadedFiles = Array.from(files);
-    const effectiveOrganizationId = userOrganizationId || null;
+    const effectiveOrganizationId = userOrganizationId || await resolveOrganizationId();
     
     console.log('📁 Processing dropped files:', {
       fileCount: uploadedFiles.length,
@@ -1454,7 +1484,7 @@ const DocumentsPageContent = () => {
         notify.error('Upload Failed', 'All dropped files failed to upload.');
       }
     }
-  }, [fileOps, notify, storageOps, organizationId, userOrganizationId, currentFolderId, setDocuments, setUploadCounter]);
+  }, [fileOps, notify, storageOps, organizationId, userOrganizationId, currentFolderId, setDocuments, setUploadCounter, resolveOrganizationId]);
 
   const handleSearchInput = useCallback((e) => {
     handleSearchChange(e.target.value);
