@@ -4,3 +4,4 @@ export { processDocumentFull } from "./process-document-full";
 export { cancelDocumentProcessing } from "./cancel-document-processing";
 export { analyzeDocument } from "./analyze-document";
 export { vectorizeDocument, handleVectorizeError } from "./vectorize-document";
+export { processDocumentBatch } from "./process-document-batch";
