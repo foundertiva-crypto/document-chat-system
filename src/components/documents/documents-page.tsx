@@ -289,17 +289,10 @@ const DocumentsPageContent = () => {
     console.log('📁 [FOLDER STATE] currentFolderId changed to:', currentFolderId)
   }, [currentFolderId])
   
-  // Fetch organization ID from profile API if not available from Clerk
+  // Fetch INTERNAL organization ID from backend profile API
+  // NOTE: Do not use Clerk org IDs for upload APIs; backend expects DB organizationId
   useEffect(() => {
     const fetchUserOrganization = async () => {
-      // Try Clerk first
-      const clerkOrgId = user?.organizationMemberships?.[0]?.organization?.id || user?.publicMetadata?.organizationId
-      if (clerkOrgId) {
-        setUserOrganizationId(clerkOrgId)
-        return
-      }
-      
-      // Fall back to profile API only once
       try {
         const response = await fetch('/api/v1/profile')
         if (response.ok) {
@@ -320,11 +313,8 @@ const DocumentsPageContent = () => {
     }
   }, [isSignedIn, userOrganizationId, authLoaded, userLoaded]); // Fixed: removed user dependency
 
-  // Get organization ID from user - will be set up properly with hooks above
-  // Simple organization ID resolution without fallback
-  const organizationId = userOrganizationId || 
-    user?.organizationMemberships?.[0]?.organization?.id || 
-    user?.publicMetadata?.organizationId
+  // Internal DB organization ID used by upload APIs
+  const organizationId = userOrganizationId
 
   // Load documents and folders data when organization ID becomes available
   const hasLoadedDataRef = useRef(false)
