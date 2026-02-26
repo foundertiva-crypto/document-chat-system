@@ -1357,12 +1357,19 @@ const DocumentsPageContent = () => {
   // File drop upload handler - now opens New Document modal
   const handleFileDropUpload = useCallback(async (files: FileList, targetFolderId: string) => {
     const uploadedFiles = Array.from(files);
+    const effectiveOrganizationId = organizationId || userOrganizationId;
     
     console.log('📁 Processing dropped files:', {
       fileCount: uploadedFiles.length,
       targetFolderId,
-      fileNames: uploadedFiles.map(f => f.name)
+      fileNames: uploadedFiles.map(f => f.name),
+      organizationId: effectiveOrganizationId,
     });
+
+    if (!effectiveOrganizationId) {
+      notify.error('Upload Failed', 'Organization is still loading. Please wait a moment and try again.');
+      return;
+    }
 
     if (uploadedFiles.length === 1) {
       // Single file - open modal with file pre-loaded
@@ -1397,7 +1404,7 @@ const DocumentsPageContent = () => {
         }
 
         try {
-          const uploadResult = await storageOps.uploadFile(file, organizationId, targetFolderId || currentFolderId);
+          const uploadResult = await storageOps.uploadFile(file, effectiveOrganizationId, targetFolderId || currentFolderId);
           if (uploadResult?.success) {
             successCount++;
           } else {
@@ -1437,7 +1444,7 @@ const DocumentsPageContent = () => {
         notify.error('Upload Failed', 'All dropped files failed to upload.');
       }
     }
-  }, [fileOps, notify, storageOps, organizationId, currentFolderId, setDocuments, setUploadCounter]);
+  }, [fileOps, notify, storageOps, organizationId, userOrganizationId, currentFolderId, setDocuments, setUploadCounter]);
 
   const handleSearchInput = useCallback((e) => {
     handleSearchChange(e.target.value);
