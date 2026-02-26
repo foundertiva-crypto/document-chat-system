@@ -60,6 +60,21 @@ export class EmbeddingService {
     this.namespaceManager = defaultNamespaceManager
   }
 
+  private isNonRetryableEmbeddingError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false
+    }
+
+    const message = error.message.toLowerCase()
+
+    return (
+      message.includes('invalid_api_key') ||
+      message.includes('incorrect api key') ||
+      message.includes('401 unauthorized') ||
+      message.includes('openai api key is invalid')
+    )
+  }
+
   /**
    * Generate embeddings for document chunks and store in Pinecone
    */
@@ -215,6 +230,14 @@ export class EmbeddingService {
           } catch (batchError) {
             lastBatchError = batchError
 
+            if (this.isNonRetryableEmbeddingError(batchError)) {
+              console.error(
+                `❌ Batch ${batchNumber} failed with non-retryable authentication/configuration error. Skipping retry.`,
+                batchError
+              )
+              break
+            }
+
             if (attempt < maxAttempts) {
               continue
             }
@@ -360,9 +383,7 @@ export class EmbeddingService {
       throw new Error('OPENAI_API_KEY environment variable is not set')
     }
 
-    console.log(
-      `🔑 Using OpenAI API key: ${process.env.OPENAI_API_KEY.substring(0, 8)}...`
-    )
+    console.log('🔑 OPENAI_API_KEY detected')
     // Validate and split texts that exceed token limits
     console.log(`🔍 Validating text sizes before sending to OpenAI...`)
     const processedTexts: string[] = []
@@ -432,6 +453,11 @@ export class EmbeddingService {
         let errorMessage = `OpenAI API error: ${response.status} ${response.statusText} - ${errorText}`
         try {
           const errorData = JSON.parse(errorText)
+          if (response.status === 401 || errorData.error?.code === 'invalid_api_key') {
+            errorMessage =
+              'OpenAI API key is invalid (401 Unauthorized). Update OPENAI_API_KEY in your environment and restart the app. Generate a new key at https://platform.openai.com/account/api-keys'
+            console.error('🔐 Invalid OpenAI API key. Update OPENAI_API_KEY and restart the service.')
+          }
           if (errorData.error?.code === 'insufficient_quota' || response.status === 429) {
             errorMessage = '⚠️ OpenAI API Quota Exceeded. Please add credits to your OpenAI account at https://platform.openai.com/account/billing'
             console.error('💳 OpenAI quota exceeded. Visit https://platform.openai.com/account/billing to add credits.')
