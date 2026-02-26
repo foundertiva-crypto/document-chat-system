@@ -117,8 +117,9 @@ export class EmbeddingService {
       )
 
       for (let i = 0; i < chunks.length; i += this.config.batchSize) {
+        const batch = chunks.slice(i, i + this.config.batchSize)
+
         try {
-          const batch = chunks.slice(i, i + this.config.batchSize)
           const batchNumber = Math.floor(i / this.config.batchSize) + 1
           const totalBatches = Math.ceil(chunks.length / this.config.batchSize)
           
