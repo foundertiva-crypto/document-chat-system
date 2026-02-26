@@ -16,10 +16,10 @@ const ALLOWED_TYPES = [
 ];
 
 const uploadSchema = z.object({
-  documentType: z.enum(['PROPOSAL', 'CONTRACT', 'CERTIFICATION', 'COMPLIANCE', 'TEMPLATE', 'OTHER', 'SOLICITATION', 'AMENDMENT', 'CAPABILITY_STATEMENT', 'PAST_PERFORMANCE']).optional()
-    .describe("Document type classification. Must be one of the predefined DocumentType enum values.")
+  documentType: z.string().optional()
+    .describe("Optional document type classification. Invalid values are tolerated and normalized to OTHER.")
 })
-  .describe("Schema for validating document upload requests. Ensures proper organization-level access control and document isolation.");
+  .describe("Schema for validating document upload requests. Ensures upload payload shape without rejecting bulk uploads due to optional metadata values.");
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,11 +62,12 @@ export async function POST(request: NextRequest) {
     const inputValidation = uploadSchema.safeParse({ 
       documentType: documentTypeParam 
     });
+    const normalizedDocumentTypeParam = (inputValidation.success ? inputValidation.data.documentType : documentTypeParam) || null;
     if (!inputValidation.success) {
       console.error('❌ Input validation failed:', inputValidation.error.format());
       return NextResponse.json(
         { 
-          error: 'Invalid input parameters',
+          error: 'Invalid input format',
           details: inputValidation.error.format()
         },
         { status: 400 }
@@ -219,7 +220,7 @@ export async function POST(request: NextRequest) {
 
     // Validate and prepare document type
     const validDocumentTypes = ['PROPOSAL', 'CONTRACT', 'CERTIFICATION', 'COMPLIANCE', 'TEMPLATE', 'OTHER', 'SOLICITATION', 'AMENDMENT', 'CAPABILITY_STATEMENT', 'PAST_PERFORMANCE'];
-    const validDocumentType = validDocumentTypes.includes(documentTypeParam) ? documentTypeParam : 'OTHER';
+    const validDocumentType = normalizedDocumentTypeParam && validDocumentTypes.includes(normalizedDocumentTypeParam) ? normalizedDocumentTypeParam : 'OTHER';
     
     // Validate folderId if provided
     const validFolderId = folderId === 'null' || folderId === '' ? null : folderId;
