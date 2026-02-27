@@ -763,28 +763,60 @@ const DocumentsPageContent = () => {
     if (!confirmed) return;
 
     setIsDeleting(true);
-    let deletedCount = 0;
+    const deletedIds: string[] = [];
+    const failedDeletes: Array<{ id: string; name: string; error: string }> = [];
 
     for (const doc of selectedDocs) {
-      const result = await deleteDocument(doc.id);
-      if (result.success) {
-        deletedCount += 1;
+      try {
+        const response = await fetch(`/api/v1/documents/${doc.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+
+        if (response.ok || response.status === 404) {
+          // 404 is treated as already-deleted for bulk cleanup UX.
+          deletedIds.push(doc.id);
+          continue;
+        }
+
+        const errorData = await response.json().catch(() => null);
+        failedDeletes.push({
+          id: doc.id,
+          name: doc.name,
+          error: errorData?.error || `Delete failed (${response.status})`,
+        });
+      } catch (error) {
+        failedDeletes.push({
+          id: doc.id,
+          name: doc.name,
+          error: error instanceof Error ? error.message : 'Delete failed',
+        });
       }
+    }
+
+    if (deletedIds.length > 0) {
+      useDocumentChatStore.setState((state) => {
+        state.documents.documents = state.documents.documents.filter((doc) => !deletedIds.includes(doc.id));
+      });
     }
 
     setIsDeleting(false);
     clearSelection();
     setIsBulkActionMode(false);
 
-    if (deletedCount === selectedDocs.length) {
-      notify.success('Documents Deleted', `Deleted ${deletedCount} ${deletedCount === 1 ? 'document' : 'documents'}.`);
+    if (deletedIds.length === selectedDocs.length) {
+      notify.success('Documents Deleted', `Deleted ${deletedIds.length} ${deletedIds.length === 1 ? 'document' : 'documents'}.`);
     } else {
       notify.warning(
         'Partial Delete',
-        `Deleted ${deletedCount} of ${selectedDocs.length} selected documents. Please retry failed deletes.`
+        `Deleted ${deletedIds.length} of ${selectedDocs.length} selected documents. ${failedDeletes.length > 0 ? `First error: ${failedDeletes[0].error}` : 'Please retry failed deletes.'}`
       );
+
+      if (failedDeletes.length > 0) {
+        console.error('Bulk delete failures:', failedDeletes);
+      }
     }
-  }, [selectedDocuments, currentDocuments, notify, deleteDocument, clearSelection]);
+  }, [selectedDocuments, currentDocuments, notify, clearSelection]);
   
   // Handle bulk AI analysis
   const handleBulkAIAnalysis = useCallback(async () => {
