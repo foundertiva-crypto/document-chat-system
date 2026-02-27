@@ -285,50 +285,23 @@ export async function POST(request: NextRequest) {
       
       console.log('✅ Document created successfully:', document.id);
 
-      // Trigger immediate basic processing (text extraction + sections only, no AI analysis)
-      console.log('🤖 Starting immediate basic processing for document:', documentId);
-      
+      // Queue basic processing asynchronously to improve upload response time
+      console.log('🤖 Queueing async basic processing for document:', documentId)
       try {
-        // Import document processor
-        const { documentProcessor } = require('@/lib/ai/document-processor');
-        
-        // Process document with basic processing only (text extraction + sections)
-        const processingResult = await documentProcessor.processDocumentBasic(
-          documentId,
-          (step: string, progress: number) => {
-            console.log(`📊 Basic Processing [${documentId}]: ${step} - ${progress}%`);
-          }
-        );
-        
-        if (processingResult.success) {
-          console.log('✅ Basic processing completed successfully for document:', documentId);
-        } else {
-          console.error('❌ Basic processing failed:', processingResult.error);
-          // Update document status to failed
-          await prisma.document.update({
-            where: { id: documentId },
-            data: { 
-              processing: {
-                status: 'FAILED',
-                error: processingResult.error || 'Processing failed',
-                completedAt: new Date()
-              }
-            }
-          });
-        }
+        await inngest.send({
+          name: 'document/process-basic.requested',
+          data: {
+            documentId,
+            organizationId,
+            userId: user.id,
+            options: {
+              source: 'direct-upload',
+              uploadSessionId,
+            },
+          },
+        })
       } catch (error) {
-        console.error('❌ Failed to process document with basic processing:', error);
-        // Update document status to failed
-        await prisma.document.update({
-          where: { id: documentId },
-          data: { 
-            processing: {
-              status: 'FAILED',
-              error: error instanceof Error ? error.message : 'Unknown error',
-              completedAt: new Date()
-            }
-          }
-        });
+        console.error('❌ Failed to queue basic processing event:', error)
       }
 
       // Get signed URL for access (if Supabase configured)
@@ -348,8 +321,8 @@ export async function POST(request: NextRequest) {
         uploadedAt: document.createdAt,
         status: (document.processing as any)?.status || 'PENDING',
         url: urlData?.signedUrl,
-        message: 'Document uploaded and basic processing completed successfully.',
-        processingStatus: 'BASIC_COMPLETED'
+        message: 'Document uploaded successfully and processing has been queued.',
+        processingStatus: 'QUEUED'
       });
       
     } catch (dbError) {

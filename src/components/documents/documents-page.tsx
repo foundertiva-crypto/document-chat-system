@@ -354,6 +354,26 @@ const DocumentsPageContent = () => {
   // Internal DB organization ID used by upload APIs
   const organizationId = userOrganizationId
 
+  const fetchDocuments = useCallback(async () => {
+    const documentsResponse = await fetch('/api/v1/documents', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!documentsResponse.ok) {
+      throw new Error(`Failed to fetch documents (${documentsResponse.status})`);
+    }
+
+    const documentsData = await documentsResponse.json();
+    if (documentsData.success && documentsData.documents) {
+      setDocuments(documentsData.documents);
+      return documentsData.documents;
+    }
+
+    throw new Error('Invalid documents response payload');
+  }, [setDocuments]);
+
   // Load documents and folders data after auth is ready.
   // API routes already enforce organization scoping server-side.
   const hasLoadedDataRef = useRef(false)
@@ -1685,19 +1705,8 @@ const DocumentsPageContent = () => {
 
       // Refresh documents list so all uploaded files appear in folder view
       try {
-        const documentsResponse = await fetch('/api/v1/documents', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        });
-
-        if (documentsResponse.ok) {
-          const documentsData = await documentsResponse.json();
-          if (documentsData.success && documentsData.documents) {
-            setDocuments(documentsData.documents);
-            setUploadCounter(prev => prev + 1);
-          }
-        }
+        await fetchDocuments();
+        setUploadCounter(prev => prev + 1);
       } catch (refreshError) {
         console.error('❌ Failed to refresh documents after multi-file drop:', refreshError);
       }
