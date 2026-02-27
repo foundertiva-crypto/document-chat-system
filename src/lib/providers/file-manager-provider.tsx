@@ -180,16 +180,30 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
           body: formData
         });
 
-        const result = await response.json();
+        const contentType = response.headers.get('content-type') || '';
+        const isJson = contentType.includes('application/json');
+        const result = isJson ? await response.json() : null;
         
         if (!response.ok) {
+          if (response.status === 413) {
+            return {
+              success: false,
+              error: 'Request Entity Too Large (413). Please reduce file size or upload files individually.'
+            };
+          }
+
+          if (!isJson) {
+            const textError = await response.text().catch(() => 'Upload failed');
+            return { success: false, error: textError || `Upload failed (${response.status})` };
+          }
+
           return { success: false, error: result.error || 'Upload failed' };
         }
 
         return { success: true, data: result };
       } catch (error) {
         console.error('Upload error:', error);
-        return { success: false, error: 'Upload failed' };
+        return { success: false, error: error instanceof Error ? error.message : 'Upload failed' };
       } finally {
         setIsUploading(false);
         setUploadProgress(0);

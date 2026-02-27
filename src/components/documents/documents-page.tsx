@@ -63,7 +63,8 @@ import {
   Save,
   ExternalLink,
   Loader2,
-  Brain
+  Brain,
+  CheckSquare
 } from 'lucide-react'
 import { AuthenticatedImage } from '@/components/ui/authenticated-image'
 import { TreeUtils } from '@/lib/utils/tree-utils'
@@ -231,6 +232,19 @@ const DocumentsPageContent = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState(null);
   const [userOrganizationId, setUserOrganizationId] = useState<string | null>(null);
+  const [uploadSession, setUploadSession] = useState<{ visible: boolean; total: number; completed: number; files: Array<{ name: string; status: 'pending' | 'uploading' | 'success' | 'failed'; progress: number; error?: string }> }>({
+    visible: false,
+    total: 0,
+    completed: 0,
+    files: []
+  });
+
+  const [deleteSession, setDeleteSession] = useState<{ visible: boolean; total: number; completed: number; files: Array<{ id: string; name: string; status: 'pending' | 'deleting' | 'success' | 'failed'; progress: number; error?: string }> }>({
+    visible: false,
+    total: 0,
+    completed: 0,
+    files: []
+  });
 
   // useRef hooks
   const fileInputRef = useRef(null);
@@ -289,23 +303,27 @@ const DocumentsPageContent = () => {
     console.log('📁 [FOLDER STATE] currentFolderId changed to:', currentFolderId)
   }, [currentFolderId])
   
-  // Fetch organization ID from profile API if not available from Clerk
+  // Fetch INTERNAL organization ID from backend APIs
+  // NOTE: Do not use Clerk org IDs for upload APIs; backend expects DB organizationId
   useEffect(() => {
     const fetchUserOrganization = async () => {
-      // Try Clerk first
-      const clerkOrgId = user?.organizationMemberships?.[0]?.organization?.id || user?.publicMetadata?.organizationId
-      if (clerkOrgId) {
-        setUserOrganizationId(clerkOrgId)
-        return
-      }
-      
-      // Fall back to profile API only once
       try {
         const response = await fetch('/api/v1/profile')
         if (response.ok) {
           const profileData = await response.json()
           if (profileData.success && profileData.data?.organizationId) {
             setUserOrganizationId(profileData.data.organizationId)
+            return
+          }
+        }
+
+        // Fallback: user endpoint contains organization object with internal DB id
+        const userResponse = await fetch('/api/v1/user')
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          const fallbackOrgId = userData?.data?.organization?.id
+          if (fallbackOrgId) {
+            setUserOrganizationId(fallbackOrgId)
           }
         }
       } catch (error) {
@@ -320,19 +338,17 @@ const DocumentsPageContent = () => {
     }
   }, [isSignedIn, userOrganizationId, authLoaded, userLoaded]); // Fixed: removed user dependency
 
-  // Get organization ID from user - will be set up properly with hooks above
-  // Simple organization ID resolution without fallback
-  const organizationId = userOrganizationId || 
-    user?.organizationMemberships?.[0]?.organization?.id || 
-    user?.publicMetadata?.organizationId
+  // Internal DB organization ID used by upload APIs
+  const organizationId = userOrganizationId
 
-  // Load documents and folders data when organization ID becomes available
+  // Load documents and folders data after auth is ready.
+  // API routes already enforce organization scoping server-side.
   const hasLoadedDataRef = useRef(false)
   
   useEffect(() => {
     const loadDocumentsData = async () => {
       // Prevent multiple loads
-      if (!organizationId || hasLoadedDataRef.current) {
+      if (!isSignedIn || !authLoaded || !userLoaded || hasLoadedDataRef.current) {
         return;
       }
 
@@ -341,7 +357,7 @@ const DocumentsPageContent = () => {
         return;
       }
 
-      console.log('🔄 Loading documents and folders data for org:', organizationId);
+      console.log('🔄 Loading documents and folders data for org:', organizationId || 'unknown');
       hasLoadedDataRef.current = true; // Mark as loading to prevent duplicates
       setLoading(true);
 
@@ -410,7 +426,7 @@ const DocumentsPageContent = () => {
     };
 
     loadDocumentsData();
-  }, [organizationId]); // Only depend on organizationId
+  }, [isSignedIn, authLoaded, userLoaded, organizationId]);
 
   // For debugging: Log when documents are loaded
   React.useEffect(() => {
@@ -734,15 +750,110 @@ const DocumentsPageContent = () => {
     return processingStatus === 'COMPLETED' && document.analysis?.content?.extractedText;
   }, []);
   
-  // Select all processed documents - only documents ready for AI analysis
+  // Select all documents in current view
   const selectAllDocuments = useCallback(() => {
-    const processedDocumentIds = new Set(
-      currentDocuments
-        .filter(doc => isDocumentReadyForAnalysis(doc))
-        .map(doc => doc.id)
+    const allDocumentIds = new Set(currentDocuments.map(doc => doc.id));
+    setSelectedDocuments(allDocumentIds);
+  }, [currentDocuments]);
+
+  const handleBulkDeleteDocuments = useCallback(async () => {
+    if (selectedDocuments.size === 0) {
+      notify.info('No Selection', 'Please select documents to delete');
+      return;
+    }
+
+    const selectedDocs = currentDocuments.filter(doc => selectedDocuments.has(doc.id));
+    const confirmed = window.confirm(
+      `Delete ${selectedDocs.length} selected ${selectedDocs.length === 1 ? 'document' : 'documents'}? This action cannot be undone.`
     );
-    setSelectedDocuments(processedDocumentIds);
-  }, [currentDocuments, isDocumentReadyForAnalysis]);
+
+    if (!confirmed) return;
+
+    setDeleteSession({
+      visible: true,
+      total: selectedDocs.length,
+      completed: 0,
+      files: selectedDocs.map(doc => ({ id: doc.id, name: doc.name, status: 'pending', progress: 0 })),
+    });
+    setIsDeleting(true);
+
+    const failedDeletes: Array<{ id: string; name: string; error: string }> = [];
+
+    const markDeleteStatus = (documentId: string, status: 'deleting' | 'success' | 'failed', error?: string) => {
+      setDeleteSession(prev => {
+        const files = prev.files.map(file =>
+          file.id === documentId
+            ? {
+                ...file,
+                status,
+                progress: status === 'deleting' ? 50 : 100,
+                error: error || file.error,
+              }
+            : file
+        );
+        const completed = files.filter(file => file.status === 'success' || file.status === 'failed').length;
+        return { ...prev, files, completed };
+      });
+    };
+
+    const deleteOne = async (doc: any) => {
+      markDeleteStatus(doc.id, 'deleting');
+      try {
+        const response = await fetch(`/api/v1/documents/${doc.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+
+        if (response.ok || response.status === 404) {
+          markDeleteStatus(doc.id, 'success');
+          return { id: doc.id, success: true as const };
+        }
+
+        const errorData = await response.json().catch(() => null);
+        const errMsg = errorData?.error || `Delete failed (${response.status})`;
+        markDeleteStatus(doc.id, 'failed', errMsg);
+        return { id: doc.id, success: false as const, error: errMsg };
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Delete failed';
+        markDeleteStatus(doc.id, 'failed', errMsg);
+        return { id: doc.id, success: false as const, error: errMsg };
+      }
+    };
+
+    const results = await Promise.all(selectedDocs.map(deleteOne));
+    const deletedIds = results.filter(r => r.success).map(r => r.id);
+
+    for (const result of results) {
+      if (!result.success) {
+        const doc = selectedDocs.find(d => d.id === result.id);
+        failedDeletes.push({ id: result.id, name: doc?.name || result.id, error: result.error || 'Delete failed' });
+      }
+    }
+
+    if (deletedIds.length > 0) {
+      useDocumentChatStore.setState((state) => {
+        state.documents.documents = state.documents.documents.filter((doc) => !deletedIds.includes(doc.id));
+      });
+      setUploadCounter(prev => prev + 1);
+    }
+
+    setIsDeleting(false);
+    clearSelection();
+    setIsBulkActionMode(false);
+
+    if (deletedIds.length === selectedDocs.length) {
+      notify.success('Documents Deleted', `Deleted ${deletedIds.length} ${deletedIds.length === 1 ? 'document' : 'documents'}.`);
+    } else {
+      notify.warning(
+        'Partial Delete',
+        `Deleted ${deletedIds.length} of ${selectedDocs.length} selected documents. ${failedDeletes.length > 0 ? `First error: ${failedDeletes[0].error}` : 'Please retry failed deletes.'}`
+      );
+
+      if (failedDeletes.length > 0) {
+        console.error('Bulk delete failures:', failedDeletes);
+      }
+    }
+  }, [selectedDocuments, currentDocuments, notify, clearSelection]);
   
   // Handle bulk AI analysis
   const handleBulkAIAnalysis = useCallback(async () => {
@@ -1063,6 +1174,67 @@ const DocumentsPageContent = () => {
     setShowEditFolderDialog(false);
   }, [editingFolder, newFolderName, newFolderDescription, newFolderColor, updateFolder]);
 
+  const startUploadSession = useCallback((files: File[]) => {
+    setUploadSession({
+      visible: true,
+      total: files.length,
+      completed: 0,
+      files: files.map(file => ({ name: file.name, status: 'pending', progress: 0 }))
+    });
+  }, []);
+
+  const markUploadFileStatus = useCallback((fileName: string, status: 'uploading' | 'success' | 'failed', error?: string) => {
+    setUploadSession(prev => {
+      const files = prev.files.map(file =>
+        file.name === fileName
+          ? {
+              ...file,
+              status,
+              progress: status === 'uploading' ? 50 : 100,
+              error: error || file.error,
+            }
+          : file
+      );
+      const completed = files.filter(file => file.status === 'success' || file.status === 'failed').length;
+      return {
+        ...prev,
+        files,
+        completed,
+      };
+    });
+  }, []);
+
+
+  const resolveOrganizationId = useCallback(async (): Promise<string | null> => {
+    if (userOrganizationId) return userOrganizationId;
+
+    try {
+      const userResponse = await fetch('/api/v1/user', { credentials: 'include' });
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        const orgId = userData?.data?.organization?.id;
+        if (orgId) {
+          setUserOrganizationId(orgId);
+          return orgId;
+        }
+      }
+
+      const profileResponse = await fetch('/api/v1/profile', { credentials: 'include' });
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        const orgId = profileData?.data?.organizationId;
+        if (orgId) {
+          setUserOrganizationId(orgId);
+          return orgId;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to resolve organization ID on demand:', error);
+    }
+
+    return null;
+  }, [userOrganizationId]);
+
   // File upload handler with future Supabase support
   const handleFileUpload = useCallback(async (event) => {
     console.log('🚀 handleFileUpload called!')
@@ -1073,8 +1245,19 @@ const DocumentsPageContent = () => {
     const ENABLE_REAL_UPLOADS = true
     console.log('⚙️ ENABLE_REAL_UPLOADS:', ENABLE_REAL_UPLOADS)
     
+    const uploadOrganizationId = userOrganizationId || await resolveOrganizationId();
+
+    if (!uploadOrganizationId) {
+      notify.error('Upload Failed', 'Organization is still loading. Please wait a moment and try again.');
+      event.target.value = '';
+      return;
+    }
+
+    startUploadSession(uploadedFiles);
+
     for (const file of uploadedFiles) {
       try {
+        markUploadFileStatus(file.name, 'uploading');
         console.log(`🔄 Processing file: ${file.name} (${file.size} bytes)`)
         
         // Debug: Log current folder info
@@ -1092,6 +1275,7 @@ const DocumentsPageContent = () => {
         const validation = fileOps.validateFile(file)
         console.log('🔍 File validation result:', validation)
         if (!validation.isValid) {
+          markUploadFileStatus(file.name, 'failed', validation.error || 'Invalid file');
           console.error('❌ File validation failed:', validation.error)
           notify.error('Upload Failed', validation.error || 'Invalid file')
           continue
@@ -1108,15 +1292,16 @@ const DocumentsPageContent = () => {
             fileName: file.name,
             fileSize: file.size,
             fileType: file.type,
-            organizationId,
+            organizationId: uploadOrganizationId,
             folderId: currentFolderId
           })
           
           // Real upload to Supabase storage
-          uploadResult = await storageOps.uploadFile(file, organizationId, currentFolderId)
+          uploadResult = await storageOps.uploadFile(file, uploadOrganizationId, currentFolderId)
           console.log('📤 Upload result:', uploadResult)
           
           if (!uploadResult.success) {
+            markUploadFileStatus(file.name, 'failed', uploadResult.error || 'Failed to upload file');
             console.error('❌ Upload failed:', uploadResult.error)
             console.error('❌ Full upload result:', uploadResult)
             notify.error('Upload Failed', uploadResult.error || 'Failed to upload file')
@@ -1213,6 +1398,7 @@ const DocumentsPageContent = () => {
 
         // Success notification
         notify.success('Upload Successful', `${file.name} has been uploaded successfully`)
+        markUploadFileStatus(file.name, 'success');
         
         // Play file drop sound effect for successful upload
         playSound(SoundEffect.FILE_DROP)
@@ -1263,7 +1449,7 @@ const DocumentsPageContent = () => {
           fileSize: file.size,
           fileType: file.type,
           targetFolderId: currentFolderId,
-          organizationId,
+          organizationId: uploadOrganizationId,
           uploadResult: uploadResult.data,
           documentId: realDocument.id,
           beforeState: {
@@ -1326,6 +1512,7 @@ const DocumentsPageContent = () => {
         }, 3000) // Wait 3 seconds for processing to complete
 
       } catch (error) {
+        markUploadFileStatus(file.name, 'failed', error.message || 'Unknown error');
         console.error('❌ Upload error in handleFileUpload:', error)
         console.error('❌ Error details:', {
           message: error.message,
@@ -1352,17 +1539,24 @@ const DocumentsPageContent = () => {
         lastDocument: currentStore.documents.documents[currentStore.documents.documents.length - 1]
       })
     }
-  }, [currentFolderId, organizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter])
+  }, [currentFolderId, userOrganizationId, fileOps, storageOps, createDocument, state, notify, playSound, setUploadCounter, resolveOrganizationId, startUploadSession, markUploadFileStatus])
 
   // File drop upload handler - now opens New Document modal
   const handleFileDropUpload = useCallback(async (files: FileList, targetFolderId: string) => {
     const uploadedFiles = Array.from(files);
+    const effectiveOrganizationId = userOrganizationId || await resolveOrganizationId();
     
     console.log('📁 Processing dropped files:', {
       fileCount: uploadedFiles.length,
       targetFolderId,
-      fileNames: uploadedFiles.map(f => f.name)
+      fileNames: uploadedFiles.map(f => f.name),
+      organizationId: effectiveOrganizationId,
     });
+
+    if (!effectiveOrganizationId) {
+      notify.error('Upload Failed', 'Organization is still loading. Please wait a moment and try again.');
+      return;
+    }
 
     if (uploadedFiles.length === 1) {
       // Single file - open modal with file pre-loaded
@@ -1382,20 +1576,71 @@ const DocumentsPageContent = () => {
       console.log('📄 Opening New Document modal with file:', file.name);
       
     } else if (uploadedFiles.length > 1) {
-      // Multiple files - show notification and open modal for first file
-      notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Processing first file. Upload others individually.`);
-      
-      const firstFile = uploadedFiles[0];
-      const validation = fileOps.validateFile(firstFile);
-      if (!validation.isValid) {
-        notify.error('Invalid File', validation.error || 'File type not supported');
-        return;
+      // Multiple files - upload all files directly instead of forcing first-file modal flow
+      notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Uploading all files...`);
+
+      startUploadSession(uploadedFiles);
+
+      let successCount = 0;
+      let failedCount = 0;
+
+      for (const file of uploadedFiles) {
+        markUploadFileStatus(file.name, 'uploading');
+        const validation = fileOps.validateFile(file);
+        if (!validation.isValid) {
+          failedCount++;
+          markUploadFileStatus(file.name, 'failed', validation.error || 'File type not supported');
+          notify.error('Invalid File', `${file.name}: ${validation.error || 'File type not supported'}`);
+          continue;
+        }
+
+        try {
+          const uploadResult = await storageOps.uploadFile(file, effectiveOrganizationId, targetFolderId || currentFolderId);
+          if (uploadResult?.success) {
+            successCount++;
+            markUploadFileStatus(file.name, 'success');
+          } else {
+            failedCount++;
+            markUploadFileStatus(file.name, 'failed', uploadResult?.error || 'Failed to upload file');
+            const errorMessage = uploadResult?.error || 'Failed to upload file';
+            notify.error(errorMessage.includes('413') ? 'File Too Large' : 'Upload Failed', `${file.name}: ${errorMessage}`);
+          }
+        } catch (error: any) {
+          failedCount++;
+          markUploadFileStatus(file.name, 'failed', error?.message || 'Unknown error');
+          const errorMessage = error?.message || 'Unknown error';
+          notify.error(errorMessage.includes('413') ? 'File Too Large' : 'Upload Failed', `${file.name}: ${errorMessage}`);
+        }
       }
 
-      setDraggedFileForModal(firstFile);
-      setShowCreateDocumentModal(true);
+      // Refresh documents list so all uploaded files appear in folder view
+      try {
+        const documentsResponse = await fetch('/api/v1/documents', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        });
+
+        if (documentsResponse.ok) {
+          const documentsData = await documentsResponse.json();
+          if (documentsData.success && documentsData.documents) {
+            setDocuments(documentsData.documents);
+            setUploadCounter(prev => prev + 1);
+          }
+        }
+      } catch (refreshError) {
+        console.error('❌ Failed to refresh documents after multi-file drop:', refreshError);
+      }
+
+      if (successCount > 0) {
+        notify.success('Upload Complete', `${successCount} file(s) uploaded successfully${failedCount > 0 ? `, ${failedCount} failed` : ''}.`);
+      }
+
+      if (failedCount > 0 && successCount === 0) {
+        notify.error('Upload Failed', 'All dropped files failed to upload.');
+      }
     }
-  }, [fileOps, notify]);
+  }, [fileOps, notify, storageOps, organizationId, userOrganizationId, currentFolderId, setDocuments, setUploadCounter, resolveOrganizationId, startUploadSession, markUploadFileStatus]);
 
   const handleSearchInput = useCallback((e) => {
     handleSearchChange(e.target.value);
@@ -2691,6 +2936,75 @@ const DocumentsPageContent = () => {
         data-folder-id={currentFolderId || UI_CONSTANTS.ROOT_FOLDER_ID}
       >
       {/* System Drag and Drop Overlay - Conditional display based on drag target */}
+      {uploadSession.visible && uploadSession.total > 0 && (
+        <div className="fixed bottom-4 right-4 w-[420px] max-w-[calc(100vw-2rem)] bg-background border rounded-lg shadow-xl z-50">
+          <div className="p-3 border-b flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Upload Session</p>
+              <p className="text-xs text-muted-foreground">{uploadSession.completed}/{uploadSession.total} completed</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setUploadSession(prev => ({ ...prev, visible: false }))}>Close</Button>
+          </div>
+          <div className="px-3 pt-2">
+            <div className="w-full h-2 rounded bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${uploadSession.total > 0 ? Math.round((uploadSession.completed / uploadSession.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+          <div className="max-h-64 overflow-auto p-3 space-y-2">
+            {uploadSession.files.map((file) => (
+              <div key={file.name} className="flex items-start justify-between gap-2 text-xs border rounded p-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{file.name}</p>
+                  {file.error && <p className="text-red-500 truncate">{file.error}</p>}
+                </div>
+                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
+                  {file.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+
+      {deleteSession.visible && deleteSession.total > 0 && (
+        <div className="fixed bottom-4 left-4 w-[420px] max-w-[calc(100vw-2rem)] bg-background border rounded-lg shadow-xl z-50">
+          <div className="p-3 border-b flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Delete Session</p>
+              <p className="text-xs text-muted-foreground">{deleteSession.completed}/{deleteSession.total} completed</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setDeleteSession(prev => ({ ...prev, visible: false }))}>
+              <X size={14} />
+            </Button>
+          </div>
+          <div className="px-3 pt-3">
+            <div className="h-2 w-full rounded bg-muted overflow-hidden">
+              <div
+                className="h-full bg-red-500 transition-all"
+                style={{ width: `${deleteSession.total > 0 ? Math.round((deleteSession.completed / deleteSession.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-3 space-y-2">
+            {deleteSession.files.map((file) => (
+              <div key={file.id} className="flex items-center justify-between rounded border px-2 py-1.5">
+                <div className="min-w-0 mr-2">
+                  <p className="text-xs font-medium truncate">{file.name}</p>
+                  {file.error && <p className="text-[11px] text-red-500 truncate">{file.error}</p>}
+                </div>
+                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
+                  {file.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isSystemDragOver && !isDragOverSpecificFolder && (
         <div className="fixed inset-0 bg-primary/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="mx-4 border-2 border-dashed border-primary rounded-lg p-8 bg-background/95 shadow-2xl max-w-md">
@@ -2781,8 +3095,45 @@ const DocumentsPageContent = () => {
               <span className="hidden sm:inline ml-1">New Document</span>
             </Button>
 
+            {currentDocuments.length > 0 && (
+              <Button
+                variant={isBulkActionMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={toggleBulkActionMode}
+                className="h-8 md:h-9 px-2 md:px-3"
+              >
+                <CheckSquare size={16} className="md:w-[18px] md:h-[18px]" />
+                <span className="hidden sm:inline ml-1">Bulk Select</span>
+              </Button>
+            )}
+
           </div>
         </div>
+
+        {isBulkActionMode && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2">
+            <Badge variant="secondary">{selectedDocuments.size} selected</Badge>
+            <Button variant="outline" size="sm" onClick={selectAllDocuments}>Select All</Button>
+            <Button variant="outline" size="sm" onClick={clearSelection}>Clear</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBulkAIAnalysis}
+              disabled={selectedDocuments.size === 0 || isAnalyzing}
+            >
+              <Brain size={14} className="mr-1" /> Analyze Selected
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleBulkDeleteDocuments}
+              disabled={selectedDocuments.size === 0 || isDeleting}
+            >
+              <Trash2 size={14} className="mr-1" /> Delete Selected
+            </Button>
+            <Button variant="ghost" size="sm" onClick={toggleBulkActionMode}>Done</Button>
+          </div>
+        )}
 
         {/* Controls Bar */}
         <div className="flex items-center justify-between gap-2">
@@ -3235,13 +3586,11 @@ const DocumentsPageContent = () => {
                       key={`${document.id}-${document.folderId || UI_CONSTANTS.ROOT_FOLDER_ID}`}
                       className={`bg-card border rounded-lg p-4 hover:shadow-md transition-shadow ${
                         selectedDocuments.has(document.id) ? 'ring-2 ring-primary' : ''
-                      } ${
-                        isBulkActionMode && !isDocumentReadyForAnalysis(document) ? 'opacity-50' : ''
-                      }`}
+                      } `}
                     >
                       <div className="flex items-center gap-4">
                         {/* Selection Checkbox for search results */}
-                        {isBulkActionMode && isDocumentReadyForAnalysis(document) && (
+                        {isBulkActionMode && (
                           <div className="flex-shrink-0">
                             <input
                               type="checkbox"
@@ -3587,16 +3936,14 @@ const DocumentsPageContent = () => {
                                 : ''
                             } ${
                               selectedDocuments.has(document.id) ? 'ring-2 ring-primary shadow-primary/25' : ''
-                            } ${
-                              isBulkActionMode && !isDocumentReadyForAnalysis(document) ? 'opacity-40' : ''
-                            }`}
+                            } `}
                             draggable={!isBulkActionMode}
                             onDragStart={(e) => !isBulkActionMode && handleDocumentDragStart(e, document)}
                             onDragEnd={handleDragEnd}
                             style={{ cursor: isBulkActionMode ? 'pointer' : (draggedDocument?.id === document.id ? 'grabbing' : 'grab') }}
                           >
                             {/* Selection Checkbox */}
-                            {isBulkActionMode && isDocumentReadyForAnalysis(document) && (
+                            {isBulkActionMode && (
                               <div className="absolute top-2 left-2 z-10">
                                 <input
                                   type="checkbox"
@@ -3613,9 +3960,7 @@ const DocumentsPageContent = () => {
                               onClick={(e) => {
                                 if (isBulkActionMode) {
                                   e.preventDefault();
-                                  if (isDocumentReadyForAnalysis(document)) {
-                                    toggleDocumentSelection(document.id);
-                                  }
+                                  toggleDocumentSelection(document.id);
                                 }
                               }}
                             >
@@ -3885,9 +4230,7 @@ const DocumentsPageContent = () => {
                                 : ''
                             } ${
                               selectedDocuments.has(document.id) ? 'bg-primary/5' : ''
-                            } ${
-                              isBulkActionMode && !isDocumentReadyForAnalysis(document) ? 'opacity-40' : ''
-                            }`}
+                            } `}
                             draggable={!isBulkActionMode}
                             onDragStart={(e) => !isBulkActionMode && handleDocumentDragStart(e, document)}
                             onDragEnd={handleDragEnd}
@@ -3899,14 +4242,12 @@ const DocumentsPageContent = () => {
                               onClick={(e) => {
                                 if (isBulkActionMode) {
                                   e.preventDefault();
-                                  if (isDocumentReadyForAnalysis(document)) {
-                                    toggleDocumentSelection(document.id);
-                                  }
+                                  toggleDocumentSelection(document.id);
                                 }
                               }}
                             >
                               {/* Selection Checkbox */}
-                              {isBulkActionMode && isDocumentReadyForAnalysis(document) && (
+                              {isBulkActionMode && (
                                 <div className="flex-shrink-0">
                                   <input
                                     type="checkbox"
