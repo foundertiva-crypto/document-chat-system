@@ -21,7 +21,12 @@ interface FolderOperations {
 }
 
 interface StorageOperations {
-  uploadFile: (file: File, organizationId: string, folderId?: string | null) => Promise<{ success: boolean; data?: any; error?: string }>;
+  uploadFile: (
+    file: File,
+    organizationId: string,
+    folderId?: string | null,
+    options?: { uploadSessionId?: string }
+  ) => Promise<{ success: boolean; data?: any; error?: string }>;
   deleteFile: (fileId: string) => Promise<{ success: boolean; error?: string }>;
   moveFile: (fileId: string, targetFolderId: string | null) => Promise<{ success: boolean; error?: string }>;
   downloadFile: (fileId: string) => Promise<{ success: boolean; url?: string; error?: string }>;
@@ -152,7 +157,7 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
 
   // Storage Operations (mock implementations - replace with actual API calls)
   const storageOps: StorageOperations = {
-    uploadFile: useCallback(async (file: File, organizationId: string, folderId?: string | null) => {
+    uploadFile: useCallback(async (file: File, organizationId: string, folderId?: string | null, options?: { uploadSessionId?: string }) => {
       setIsUploading(true);
       setUploadProgress(0);
       
@@ -163,17 +168,14 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
           return { success: false, error: validation.error };
         }
 
-        // Simulate upload progress
-        for (let i = 0; i <= 100; i += 10) {
-          setUploadProgress(i);
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        setUploadProgress(10);
 
         // TODO: Replace with actual API call
         const formData = new FormData();
         formData.append('file', file);
         formData.append('organizationId', organizationId);
         if (folderId) formData.append('folderId', folderId);
+        if (options?.uploadSessionId) formData.append('uploadSessionId', options.uploadSessionId);
 
         const response = await fetch('/api/v1/documents/upload', {
           method: 'POST',
@@ -200,6 +202,7 @@ export const FileManagerProvider: React.FC<FileManagerProviderProps> = ({ childr
           return { success: false, error: result.error || 'Upload failed' };
         }
 
+        setUploadProgress(100);
         return { success: true, data: result };
       } catch (error) {
         console.error('Upload error:', error);

@@ -232,10 +232,19 @@ const DocumentsPageContent = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState(null);
   const [userOrganizationId, setUserOrganizationId] = useState<string | null>(null);
-  const [uploadSession, setUploadSession] = useState<{ visible: boolean; total: number; completed: number; files: Array<{ name: string; status: 'pending' | 'uploading' | 'success' | 'failed'; progress: number; error?: string }> }>({
+  const [uploadSession, setUploadSession] = useState<{
+    sessionId: string | null;
+    visible: boolean;
+    total: number;
+    completed: number;
+    isCancelling: boolean;
+    files: Array<{ name: string; status: 'pending' | 'uploading' | 'success' | 'failed' | 'cancelled'; progress: number; error?: string }>;
+  }>({
+    sessionId: null,
     visible: false,
     total: 0,
     completed: 0,
+    isCancelling: false,
     files: []
   });
 
@@ -248,6 +257,10 @@ const DocumentsPageContent = () => {
 
   // useRef hooks
   const fileInputRef = useRef(null);
+  const uploadCancellationRef = useRef<{ sessionId: string | null; cancelRequested: boolean }>({
+    sessionId: null,
+    cancelRequested: false,
+  });
   
   // ALL useCallback hooks - MUST be called before any early returns
   const toggleBulkActionMode = useCallback(() => {
@@ -340,6 +353,26 @@ const DocumentsPageContent = () => {
 
   // Internal DB organization ID used by upload APIs
   const organizationId = userOrganizationId
+
+  const fetchDocuments = useCallback(async () => {
+    const documentsResponse = await fetch('/api/v1/documents', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+
+    if (!documentsResponse.ok) {
+      throw new Error(`Failed to fetch documents (${documentsResponse.status})`);
+    }
+
+    const documentsData = await documentsResponse.json();
+    if (documentsData.success && documentsData.documents) {
+      setDocuments(documentsData.documents);
+      return documentsData.documents;
+    }
+
+    throw new Error('Invalid documents response payload');
+  }, [setDocuments]);
 
   // Load documents and folders data after auth is ready.
   // API routes already enforce organization scoping server-side.
@@ -1175,15 +1208,22 @@ const DocumentsPageContent = () => {
   }, [editingFolder, newFolderName, newFolderDescription, newFolderColor, updateFolder]);
 
   const startUploadSession = useCallback((files: File[]) => {
+    const sessionId = `upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    uploadCancellationRef.current = { sessionId, cancelRequested: false };
+
     setUploadSession({
+      sessionId,
       visible: true,
       total: files.length,
       completed: 0,
+      isCancelling: false,
       files: files.map(file => ({ name: file.name, status: 'pending', progress: 0 }))
     });
+
+    return sessionId;
   }, []);
 
-  const markUploadFileStatus = useCallback((fileName: string, status: 'uploading' | 'success' | 'failed', error?: string) => {
+  const markUploadFileStatus = useCallback((fileName: string, status: 'uploading' | 'success' | 'failed' | 'cancelled', error?: string) => {
     setUploadSession(prev => {
       const files = prev.files.map(file =>
         file.name === fileName
@@ -1195,7 +1235,7 @@ const DocumentsPageContent = () => {
             }
           : file
       );
-      const completed = files.filter(file => file.status === 'success' || file.status === 'failed').length;
+      const completed = files.filter(file => file.status === 'success' || file.status === 'failed' || file.status === 'cancelled').length;
       return {
         ...prev,
         files,
@@ -1203,6 +1243,47 @@ const DocumentsPageContent = () => {
       };
     });
   }, []);
+
+  const cancelUploadSession = useCallback(async () => {
+    const currentSessionId = uploadCancellationRef.current.sessionId;
+    if (!currentSessionId) {
+      notify.error('Cancel Failed', 'No active upload session found.');
+      return;
+    }
+
+    uploadCancellationRef.current.cancelRequested = true;
+    setUploadSession(prev => ({ ...prev, isCancelling: true }));
+
+    try {
+      const response = await fetch(`/api/v1/documents/upload/sessions/${currentSessionId}/cancel`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || 'Failed to cancel upload session');
+      }
+
+      await fetchDocuments();
+      setUploadCounter(prev => prev + 1);
+
+      setUploadSession(prev => ({
+        ...prev,
+        isCancelling: false,
+        files: prev.files.map(file =>
+          file.status === 'pending' || file.status === 'uploading'
+            ? { ...file, status: 'cancelled', progress: 100, error: 'Cancelled by user' }
+            : file
+        ),
+      }));
+
+      notify.success('Upload Session Cancelled', `Removed ${result?.deletedDocuments || 0} uploaded file(s) from this session.`);
+    } catch (error: any) {
+      setUploadSession(prev => ({ ...prev, isCancelling: false }));
+      notify.error('Cancel Failed', error?.message || 'Unable to cancel upload session.');
+    }
+  }, [fetchDocuments, notify, setUploadCounter]);
 
 
   const resolveOrganizationId = useCallback(async (): Promise<string | null> => {
@@ -1253,9 +1334,13 @@ const DocumentsPageContent = () => {
       return;
     }
 
-    startUploadSession(uploadedFiles);
+    const uploadSessionId = startUploadSession(uploadedFiles);
 
     for (const file of uploadedFiles) {
+      if (uploadCancellationRef.current.cancelRequested) {
+        markUploadFileStatus(file.name, "cancelled", "Cancelled by user");
+        continue;
+      }
       try {
         markUploadFileStatus(file.name, 'uploading');
         console.log(`🔄 Processing file: ${file.name} (${file.size} bytes)`)
@@ -1297,7 +1382,7 @@ const DocumentsPageContent = () => {
           })
           
           // Real upload to Supabase storage
-          uploadResult = await storageOps.uploadFile(file, uploadOrganizationId, currentFolderId)
+          uploadResult = await storageOps.uploadFile(file, uploadOrganizationId, currentFolderId, { uploadSessionId })
           console.log('📤 Upload result:', uploadResult)
           
           if (!uploadResult.success) {
@@ -1579,12 +1664,17 @@ const DocumentsPageContent = () => {
       // Multiple files - upload all files directly instead of forcing first-file modal flow
       notify.info('Multiple Files', `${uploadedFiles.length} files dropped. Uploading all files...`);
 
-      startUploadSession(uploadedFiles);
+      const uploadSessionId = startUploadSession(uploadedFiles);
 
       let successCount = 0;
       let failedCount = 0;
 
       for (const file of uploadedFiles) {
+        if (uploadCancellationRef.current.cancelRequested) {
+          markUploadFileStatus(file.name, "cancelled", "Cancelled by user");
+          continue;
+        }
+
         markUploadFileStatus(file.name, 'uploading');
         const validation = fileOps.validateFile(file);
         if (!validation.isValid) {
@@ -1595,7 +1685,7 @@ const DocumentsPageContent = () => {
         }
 
         try {
-          const uploadResult = await storageOps.uploadFile(file, effectiveOrganizationId, targetFolderId || currentFolderId);
+          const uploadResult = await storageOps.uploadFile(file, effectiveOrganizationId, targetFolderId || currentFolderId, { uploadSessionId });
           if (uploadResult?.success) {
             successCount++;
             markUploadFileStatus(file.name, 'success');
@@ -1615,19 +1705,8 @@ const DocumentsPageContent = () => {
 
       // Refresh documents list so all uploaded files appear in folder view
       try {
-        const documentsResponse = await fetch('/api/v1/documents', {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-        });
-
-        if (documentsResponse.ok) {
-          const documentsData = await documentsResponse.json();
-          if (documentsData.success && documentsData.documents) {
-            setDocuments(documentsData.documents);
-            setUploadCounter(prev => prev + 1);
-          }
-        }
+        await fetchDocuments();
+        setUploadCounter(prev => prev + 1);
       } catch (refreshError) {
         console.error('❌ Failed to refresh documents after multi-file drop:', refreshError);
       }
@@ -2943,7 +3022,17 @@ const DocumentsPageContent = () => {
               <p className="text-sm font-semibold">Upload Session</p>
               <p className="text-xs text-muted-foreground">{uploadSession.completed}/{uploadSession.total} completed</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setUploadSession(prev => ({ ...prev, visible: false }))}>Close</Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={cancelUploadSession}
+                disabled={uploadSession.isCancelling || uploadSession.completed >= uploadSession.total}
+              >
+                {uploadSession.isCancelling ? 'Cancelling...' : 'Cancel Session'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setUploadSession(prev => ({ ...prev, visible: false }))}>Close</Button>
+            </div>
           </div>
           <div className="px-3 pt-2">
             <div className="w-full h-2 rounded bg-muted overflow-hidden">
@@ -2960,7 +3049,7 @@ const DocumentsPageContent = () => {
                   <p className="truncate font-medium">{file.name}</p>
                   {file.error && <p className="text-red-500 truncate">{file.error}</p>}
                 </div>
-                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
+                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : file.status === 'cancelled' ? 'outline' : 'secondary'}>
                   {file.status}
                 </Badge>
               </div>
@@ -2996,7 +3085,7 @@ const DocumentsPageContent = () => {
                   <p className="text-xs font-medium truncate">{file.name}</p>
                   {file.error && <p className="text-[11px] text-red-500 truncate">{file.error}</p>}
                 </div>
-                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
+                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : file.status === 'cancelled' ? 'outline' : 'secondary'}>
                   {file.status}
                 </Badge>
               </div>

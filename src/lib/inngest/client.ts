@@ -98,6 +98,8 @@ export type InngestEvents = {
       processingTime: number;
       extractedText: string;
       sectionsCount: number;
+      batchId?: string;
+      options?: any;
     };
   };
   "document/process-basic.failed": {
@@ -105,6 +107,7 @@ export type InngestEvents = {
       documentId: string;
       organizationId: string;
       error: string;
+      batchId?: string;
     };
   };
   "document/process-full.completed": {
@@ -131,6 +134,7 @@ export type InngestEvents = {
       userId: string;
       jobId: string;
       options?: {
+        batchId?: string;
         forceReprocess?: boolean;
         chunkSize?: number;
         overlap?: number;
@@ -157,6 +161,7 @@ export type InngestEvents = {
       chunksCreated: number;
       tokensProcessed: number;
       costEstimate: number;
+      batchId?: string;
     };
   };
   "document/vectorize.failed": {
@@ -165,6 +170,7 @@ export type InngestEvents = {
       organizationId: string;
       jobId: string;
       error: string;
+      batchId?: string;
     };
   };
   // SAM.gov Sync Events

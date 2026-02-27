@@ -17,7 +17,8 @@ export const vectorizeDocument = inngest.createFunction(
           documentId: event.data.event.data.documentId,
           organizationId: event.data.event.data.organizationId,
           jobId: event.data.event.data.jobId,
-          error: error.message || 'Unknown error'
+          error: error.message || 'Unknown error',
+          batchId: event.data.event.data.options?.batchId
         }
       })
     }
@@ -26,6 +27,7 @@ export const vectorizeDocument = inngest.createFunction(
   async ({ event, step }) => {
     try {
       const { documentId, organizationId, userId, jobId, options = {} } = event.data
+      const batchId = options?.batchId
       const startTime = Date.now()
 
       console.log('🚀 [INNGEST] Starting vectorization job:', {
@@ -275,7 +277,8 @@ export const vectorizeDocument = inngest.createFunction(
           processingTime: processingTime,
           chunksCreated: result.stats.chunksCreated,
           tokensProcessed: result.stats.tokensProcessed,
-          costEstimate: result.stats.costEstimate
+          costEstimate: result.stats.costEstimate,
+          batchId
         }
       })
 
@@ -300,7 +303,8 @@ export const vectorizeDocument = inngest.createFunction(
           documentId: event.data.documentId,
           organizationId: event.data.organizationId,
           jobId: event.data.jobId,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
+          batchId
         }
       })
       
