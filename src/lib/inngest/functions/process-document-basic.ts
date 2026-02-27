@@ -17,7 +17,9 @@ export const processDocumentBasic = inngest.createFunction(
   },
   { event: "document/process-basic.requested" },
   async ({ event, step }) => {
-    const { documentId, organizationId, userId, options } = event.data;
+    const { documentId, organizationId, userId, options = {} } = event.data;
+    const batchId = options?.batchId;
+    const autoVectorizeAfterBasic = options?.autoVectorizeAfterBasic === true;
     const startTime = Date.now();
 
     try {
@@ -86,6 +88,12 @@ export const processDocumentBasic = inngest.createFunction(
           processingTime: Date.now() - startTime,
           extractedText: processingResult.aiData?.content.extractedText || '',
           sectionsCount: processingResult.aiData?.structure.sections.length || 0,
+          batchId,
+          options: {
+            ...options,
+            userId,
+            autoVectorizeAfterBasic,
+          },
         },
       });
 
@@ -166,6 +174,7 @@ export const processDocumentBasic = inngest.createFunction(
           documentId,
           organizationId,
           error: error instanceof Error ? error.message : 'Unknown error',
+          batchId,
         },
       });
 
