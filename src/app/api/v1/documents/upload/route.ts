@@ -27,8 +27,12 @@ export async function POST(request: NextRequest) {
     const requestedOrganizationId = formData.get('organizationId') as string | null;
     const folderId = formData.get('folderId') as string | null;
     const tagsParam = formData.get('tags') as string | null;
+    const uploadSessionIdRaw = formData.get('uploadSessionId');
     const documentTypeRaw = formData.get('documentType');
     const documentTypeParam = typeof documentTypeRaw === 'string' ? documentTypeRaw : null;
+    const uploadSessionId = typeof uploadSessionIdRaw === 'string' && uploadSessionIdRaw.trim().length > 0
+      ? uploadSessionIdRaw.trim()
+      : null;
     
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -53,6 +57,7 @@ export async function POST(request: NextRequest) {
       folderId,
       tags,
       documentType: documentTypeParam,
+      uploadSessionId,
       userId
     });
 
@@ -264,7 +269,8 @@ export async function POST(request: NextRequest) {
             status: 'PENDING',
             startedAt: null,
             completedAt: null,
-            error: null
+            error: null,
+            uploadSessionId
           },
           
           // Initialize other required JSON fields with empty objects
