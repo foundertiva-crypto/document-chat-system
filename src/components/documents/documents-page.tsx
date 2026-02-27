@@ -239,6 +239,13 @@ const DocumentsPageContent = () => {
     files: []
   });
 
+  const [deleteSession, setDeleteSession] = useState<{ visible: boolean; total: number; completed: number; files: Array<{ id: string; name: string; status: 'pending' | 'deleting' | 'success' | 'failed'; progress: number; error?: string }> }>({
+    visible: false,
+    total: 0,
+    completed: 0,
+    files: []
+  });
+
   // useRef hooks
   const fileInputRef = useRef(null);
   
@@ -762,11 +769,35 @@ const DocumentsPageContent = () => {
 
     if (!confirmed) return;
 
+    setDeleteSession({
+      visible: true,
+      total: selectedDocs.length,
+      completed: 0,
+      files: selectedDocs.map(doc => ({ id: doc.id, name: doc.name, status: 'pending', progress: 0 })),
+    });
     setIsDeleting(true);
-    const deletedIds: string[] = [];
+
     const failedDeletes: Array<{ id: string; name: string; error: string }> = [];
 
-    for (const doc of selectedDocs) {
+    const markDeleteStatus = (documentId: string, status: 'deleting' | 'success' | 'failed', error?: string) => {
+      setDeleteSession(prev => {
+        const files = prev.files.map(file =>
+          file.id === documentId
+            ? {
+                ...file,
+                status,
+                progress: status === 'deleting' ? 50 : 100,
+                error: error || file.error,
+              }
+            : file
+        );
+        const completed = files.filter(file => file.status === 'success' || file.status === 'failed').length;
+        return { ...prev, files, completed };
+      });
+    };
+
+    const deleteOne = async (doc: any) => {
+      markDeleteStatus(doc.id, 'deleting');
       try {
         const response = await fetch(`/api/v1/documents/${doc.id}`, {
           method: 'DELETE',
@@ -774,23 +805,28 @@ const DocumentsPageContent = () => {
         });
 
         if (response.ok || response.status === 404) {
-          // 404 is treated as already-deleted for bulk cleanup UX.
-          deletedIds.push(doc.id);
-          continue;
+          markDeleteStatus(doc.id, 'success');
+          return { id: doc.id, success: true as const };
         }
 
         const errorData = await response.json().catch(() => null);
-        failedDeletes.push({
-          id: doc.id,
-          name: doc.name,
-          error: errorData?.error || `Delete failed (${response.status})`,
-        });
+        const errMsg = errorData?.error || `Delete failed (${response.status})`;
+        markDeleteStatus(doc.id, 'failed', errMsg);
+        return { id: doc.id, success: false as const, error: errMsg };
       } catch (error) {
-        failedDeletes.push({
-          id: doc.id,
-          name: doc.name,
-          error: error instanceof Error ? error.message : 'Delete failed',
-        });
+        const errMsg = error instanceof Error ? error.message : 'Delete failed';
+        markDeleteStatus(doc.id, 'failed', errMsg);
+        return { id: doc.id, success: false as const, error: errMsg };
+      }
+    };
+
+    const results = await Promise.all(selectedDocs.map(deleteOne));
+    const deletedIds = results.filter(r => r.success).map(r => r.id);
+
+    for (const result of results) {
+      if (!result.success) {
+        const doc = selectedDocs.find(d => d.id === result.id);
+        failedDeletes.push({ id: result.id, name: doc?.name || result.id, error: result.error || 'Delete failed' });
       }
     }
 
@@ -798,6 +834,7 @@ const DocumentsPageContent = () => {
       useDocumentChatStore.setState((state) => {
         state.documents.documents = state.documents.documents.filter((doc) => !deletedIds.includes(doc.id));
       });
+      setUploadCounter(prev => prev + 1);
     }
 
     setIsDeleting(false);
@@ -1166,6 +1203,7 @@ const DocumentsPageContent = () => {
       };
     });
   }, []);
+
 
   const resolveOrganizationId = useCallback(async (): Promise<string | null> => {
     if (userOrganizationId) return userOrganizationId;
@@ -2921,6 +2959,42 @@ const DocumentsPageContent = () => {
                 <div className="min-w-0">
                   <p className="truncate font-medium">{file.name}</p>
                   {file.error && <p className="text-red-500 truncate">{file.error}</p>}
+                </div>
+                <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
+                  {file.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+
+      {deleteSession.visible && deleteSession.total > 0 && (
+        <div className="fixed bottom-4 left-4 w-[420px] max-w-[calc(100vw-2rem)] bg-background border rounded-lg shadow-xl z-50">
+          <div className="p-3 border-b flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold">Delete Session</p>
+              <p className="text-xs text-muted-foreground">{deleteSession.completed}/{deleteSession.total} completed</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setDeleteSession(prev => ({ ...prev, visible: false }))}>
+              <X size={14} />
+            </Button>
+          </div>
+          <div className="px-3 pt-3">
+            <div className="h-2 w-full rounded bg-muted overflow-hidden">
+              <div
+                className="h-full bg-red-500 transition-all"
+                style={{ width: `${deleteSession.total > 0 ? Math.round((deleteSession.completed / deleteSession.total) * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto p-3 space-y-2">
+            {deleteSession.files.map((file) => (
+              <div key={file.id} className="flex items-center justify-between rounded border px-2 py-1.5">
+                <div className="min-w-0 mr-2">
+                  <p className="text-xs font-medium truncate">{file.name}</p>
+                  {file.error && <p className="text-[11px] text-red-500 truncate">{file.error}</p>}
                 </div>
                 <Badge variant={file.status === 'success' ? 'default' : file.status === 'failed' ? 'destructive' : 'secondary'}>
                   {file.status}
