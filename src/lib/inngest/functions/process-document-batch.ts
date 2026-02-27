@@ -8,90 +8,106 @@ type BatchProgressUpdate = {
   failed: boolean
 }
 
+const MAX_BATCH_PROGRESS_UPDATE_RETRIES = 5
+
 const updateBatchProgressForDocument = async ({ batchId, organizationId, documentId, failed }: BatchProgressUpdate) => {
-  const batch = await prisma.batchProcessing.findFirst({
-    where: {
-      id: batchId,
-      organizationId,
-    },
-  })
+  for (let attempt = 0; attempt < MAX_BATCH_PROGRESS_UPDATE_RETRIES; attempt++) {
+    const batch = await prisma.batchProcessing.findFirst({
+      where: {
+        id: batchId,
+        organizationId,
+      },
+    })
 
-  if (!batch) {
-    return { found: false as const }
-  }
+    if (!batch) {
+      return { found: false as const }
+    }
 
-  const metadata = (batch.metadata as any) || {}
-  const queueingSummary = metadata.queueingSummary || {}
-  const tracker = metadata.tracker || {}
+    const metadata = (batch.metadata as any) || {}
+    const queueingSummary = metadata.queueingSummary || {}
+    const tracker = metadata.tracker || {}
 
-  const expectedDocumentIds: string[] = Array.from(
-    new Set(
-      (tracker.expectedDocumentIds as string[]) || [
-        ...(queueingSummary.queuedBasicDocumentIds || []),
-        ...(queueingSummary.queuedVectorizeDocumentIds || []),
-      ]
+    const expectedDocumentIds: string[] = Array.from(
+      new Set(
+        (tracker.expectedDocumentIds as string[]) || [
+          ...(queueingSummary.queuedBasicDocumentIds || []),
+          ...(queueingSummary.queuedVectorizeDocumentIds || []),
+        ]
+      )
     )
-  )
 
-  const terminalDocumentIds = new Set<string>((tracker.terminalDocumentIds as string[]) || [])
-  const failedDocumentIds = new Set<string>((tracker.failedDocumentIds as string[]) || [])
+    const terminalDocumentIds = new Set<string>((tracker.terminalDocumentIds as string[]) || [])
+    const failedDocumentIds = new Set<string>((tracker.failedDocumentIds as string[]) || [])
 
-  if (terminalDocumentIds.has(documentId)) {
-    return { found: true as const, alreadyTerminal: true as const, isDone: batch.status === 'completed' || batch.status === 'failed' }
+    if (terminalDocumentIds.has(documentId)) {
+      return {
+        found: true as const,
+        alreadyTerminal: true as const,
+        isDone: batch.status === 'completed' || batch.status === 'failed',
+      }
+    }
+
+    terminalDocumentIds.add(documentId)
+    if (failed) {
+      failedDocumentIds.add(documentId)
+    }
+
+    const pendingDocumentIds = expectedDocumentIds.filter((id) => !terminalDocumentIds.has(id))
+    const processedDocuments = terminalDocumentIds.size - failedDocumentIds.size
+    const failedDocuments = failedDocumentIds.size
+    const isDone = expectedDocumentIds.length === 0 || pendingDocumentIds.length === 0
+    const status = isDone ? (failedDocuments > 0 ? 'failed' : 'completed') : 'processing'
+
+    const updatedMetadata = {
+      ...metadata,
+      tracker: {
+        expectedDocumentIds,
+        terminalDocumentIds: Array.from(terminalDocumentIds),
+        failedDocumentIds: Array.from(failedDocumentIds),
+        pendingDocumentIds,
+      },
+      ...(isDone
+        ? {
+            completionSummary: {
+              expectedDocuments: expectedDocumentIds.length,
+              processedDocuments,
+              failedDocuments,
+              completedAt: new Date().toISOString(),
+            },
+          }
+        : {}),
+    }
+
+    const updateResult = await prisma.batchProcessing.updateMany({
+      where: {
+        id: batchId,
+        organizationId,
+        updatedAt: batch.updatedAt,
+      },
+      data: {
+        status,
+        processedDocuments,
+        failedDocuments,
+        completedAt: isDone ? new Date() : null,
+        error: isDone && failedDocuments > 0 ? `${failedDocuments} document(s) failed during batch processing` : null,
+        metadata: updatedMetadata as any,
+      },
+    })
+
+    if (updateResult.count === 1) {
+      return {
+        found: true as const,
+        alreadyTerminal: false as const,
+        isDone,
+        status,
+        processedDocuments,
+        failedDocuments,
+        startedAt: batch.startedAt,
+      }
+    }
   }
 
-  terminalDocumentIds.add(documentId)
-  if (failed) {
-    failedDocumentIds.add(documentId)
-  }
-
-  const pendingDocumentIds = expectedDocumentIds.filter((id) => !terminalDocumentIds.has(id))
-  const processedDocuments = terminalDocumentIds.size - failedDocumentIds.size
-  const failedDocuments = failedDocumentIds.size
-  const isDone = expectedDocumentIds.length === 0 || pendingDocumentIds.length === 0
-  const status = isDone ? (failedDocuments > 0 ? 'failed' : 'completed') : 'processing'
-
-  const updatedMetadata = {
-    ...metadata,
-    tracker: {
-      expectedDocumentIds,
-      terminalDocumentIds: Array.from(terminalDocumentIds),
-      failedDocumentIds: Array.from(failedDocumentIds),
-      pendingDocumentIds,
-    },
-    ...(isDone
-      ? {
-          completionSummary: {
-            expectedDocuments: expectedDocumentIds.length,
-            processedDocuments,
-            failedDocuments,
-            completedAt: new Date().toISOString(),
-          },
-        }
-      : {}),
-  }
-
-  const updatedBatch = await prisma.batchProcessing.update({
-    where: { id: batchId },
-    data: {
-      status,
-      processedDocuments,
-      failedDocuments,
-      completedAt: isDone ? new Date() : null,
-      error: isDone && failedDocuments > 0 ? `${failedDocuments} document(s) failed during batch processing` : null,
-      metadata: updatedMetadata as any,
-    },
-  })
-
-  return {
-    found: true as const,
-    alreadyTerminal: false as const,
-    isDone,
-    status,
-    processedDocuments,
-    failedDocuments,
-    startedAt: updatedBatch.startedAt,
-  }
+  throw new Error(`Failed to update batch progress for ${batchId} after ${MAX_BATCH_PROGRESS_UPDATE_RETRIES} retries`)
 }
 
 export const processDocumentBatch = inngest.createFunction(
@@ -124,7 +140,7 @@ export const processDocumentBatch = inngest.createFunction(
       })
     })
 
-    const results = await step.run('fanout-document-jobs', async () => {
+    const results = await step.run('analyze-document-jobs', async () => {
       const documents = await prisma.document.findMany({
         where: {
           id: { in: documentIds },
@@ -159,45 +175,15 @@ export const processDocumentBatch = inngest.createFunction(
         const needsBasicProcessing = !hasExtractedText || forceReprocess
 
         if (needsBasicProcessing) {
-          await inngest.send({
-            name: 'document/process-basic.requested',
-            data: {
-              documentId: document.id,
-              organizationId,
-              userId,
-              options: {
-                source: 'batch-ingest',
-                batchId,
-                forceReprocess,
-                autoVectorizeAfterBasic: autoVectorize,
-                chunkSize: options?.chunkSize,
-                overlap: options?.overlap,
-              },
-            },
-          })
           queuedBasic.push(document.id)
 
           if (autoVectorize) {
             autoVectorizeAfterBasic.push(document.id)
           }
+          continue
         }
 
-        if (autoVectorize && !needsBasicProcessing) {
-          await inngest.send({
-            name: 'document/vectorize.requested',
-            data: {
-              documentId: document.id,
-              organizationId,
-              userId,
-              jobId: `batch_vectorize_${document.id}_${Date.now()}`,
-              options: {
-                batchId,
-                forceReprocess,
-                chunkSize: options?.chunkSize,
-                overlap: options?.overlap,
-              },
-            },
-          })
+        if (autoVectorize) {
           queuedVectorize.push(document.id)
         }
       }
@@ -211,16 +197,18 @@ export const processDocumentBatch = inngest.createFunction(
       }
     })
 
-    await step.run('save-batch-queueing-summary', async () => {
-      const expectedDocumentIds = Array.from(new Set([...results.queuedVectorize, ...results.queuedBasic]))
+    const expectedDocumentIds = Array.from(new Set([...results.queuedVectorize, ...results.queuedBasic]))
+    const isImmediateCompletion = expectedDocumentIds.length === 0
 
+    await step.run('save-batch-queueing-summary', async () => {
       await prisma.batchProcessing.update({
         where: { id: batchId },
         data: {
-          status: 'processing',
-          completedAt: null,
+          status: isImmediateCompletion ? 'completed' : 'processing',
+          completedAt: isImmediateCompletion ? new Date() : null,
           processedDocuments: 0,
           failedDocuments: 0,
+          error: null,
           metadata: {
             ...(options || {}),
             autoVectorize,
@@ -231,6 +219,16 @@ export const processDocumentBatch = inngest.createFunction(
               failedDocumentIds: [],
               pendingDocumentIds: expectedDocumentIds,
             },
+            ...(isImmediateCompletion
+              ? {
+                  completionSummary: {
+                    expectedDocuments: 0,
+                    processedDocuments: 0,
+                    failedDocuments: 0,
+                    completedAt: new Date().toISOString(),
+                  },
+                }
+              : {}),
             queueingSummary: {
               foundDocuments: results.foundDocuments,
               skippedDocuments: results.skipped.length,
@@ -246,6 +244,58 @@ export const processDocumentBatch = inngest.createFunction(
         },
       })
     })
+
+    if (!isImmediateCompletion) {
+      await step.run('fanout-document-jobs', async () => {
+        for (const queuedBasicDocumentId of results.queuedBasic) {
+          await inngest.send({
+            name: 'document/process-basic.requested',
+            data: {
+              documentId: queuedBasicDocumentId,
+              organizationId,
+              userId,
+              options: {
+                source: 'batch-ingest',
+                batchId,
+                forceReprocess,
+                autoVectorizeAfterBasic: autoVectorize,
+                chunkSize: options?.chunkSize,
+                overlap: options?.overlap,
+              },
+            },
+          })
+        }
+
+        for (const queuedVectorizeDocumentId of results.queuedVectorize) {
+          await inngest.send({
+            name: 'document/vectorize.requested',
+            data: {
+              documentId: queuedVectorizeDocumentId,
+              organizationId,
+              userId,
+              jobId: `batch_vectorize_${queuedVectorizeDocumentId}_${Date.now()}`,
+              options: {
+                batchId,
+                forceReprocess,
+                chunkSize: options?.chunkSize,
+                overlap: options?.overlap,
+              },
+            },
+          })
+        }
+      })
+    } else {
+      await step.sendEvent('send-batch-completed-event', {
+        name: 'document/batch.completed',
+        data: {
+          batchId,
+          organizationId,
+          processedCount: 0,
+          failedCount: 0,
+          totalTime: 0,
+        },
+      })
+    }
 
     return {
       success: true,
