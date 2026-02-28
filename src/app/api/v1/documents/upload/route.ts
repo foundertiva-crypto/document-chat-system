@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/db';
 import { supabaseAdmin } from '@/lib/supabase';
-import { uploadToLocal } from '@/lib/local-storage';
+import { deleteFromLocal, uploadToLocal } from '@/lib/local-storage';
 import { nanoid } from 'nanoid';
 import { fileUpload } from '@/lib/config/env';
 import { ALLOWED_FILE_TYPES } from '@/lib/constants';
@@ -302,6 +302,37 @@ export async function POST(request: NextRequest) {
         })
       } catch (error) {
         console.error('❌ Failed to queue basic processing event:', error)
+
+        // Best-effort rollback so failed queueing does not leave documents stuck in pending state
+        try {
+          await prisma.document.delete({
+            where: { id: documentId },
+          });
+          console.log('🧹 Rolled back document after queue failure:', documentId);
+        } catch (cleanupError) {
+          console.error('❌ Failed to rollback document after queue failure:', cleanupError);
+        }
+
+        if (uploadedToStorage && filePath) {
+          try {
+            if (supabaseAdmin) {
+              await supabaseAdmin.storage.from('documents').remove([filePath]);
+            } else {
+              await deleteFromLocal(filePath);
+            }
+            console.log('🧹 Cleaned up uploaded file after queue failure:', filePath);
+          } catch (cleanupError) {
+            console.error('❌ Failed to cleanup uploaded file after queue failure:', cleanupError);
+          }
+        }
+
+        return NextResponse.json(
+          {
+            error: 'Document uploaded, but failed to queue processing. Please try uploading again.',
+            details: error instanceof Error ? error.message : 'Failed to queue processing job',
+          },
+          { status: 503 }
+        );
       }
 
       // Get signed URL for access (if Supabase configured)
