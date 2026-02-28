@@ -144,8 +144,11 @@ export async function POST(
 
     // Check if document has content (either file or editor content)
     const documentContent = (document.content as any);
-    const hasEditorContent = documentContent?.sections?.length > 0 || documentContent?.extractedText;
-    const hasFileContent = document.filePath && document.extractedText;
+    const hasExtractedText = typeof document.extractedText === 'string' && document.extractedText.trim().length > 0;
+    const hasContentExtractedText = typeof documentContent?.extractedText === 'string' && documentContent.extractedText.trim().length > 0;
+    const hasContentSections = Array.isArray(documentContent?.sections) && documentContent.sections.length > 0;
+    const hasEditorContent = hasContentSections || hasContentExtractedText;
+    const hasFileContent = !!document.filePath && hasExtractedText;
     
     if (!document.filePath && !hasEditorContent) {
       return NextResponse.json(
@@ -166,9 +169,8 @@ export async function POST(
     // Check if document has basic processing (extracted text or sections)
     // For editor-created documents, we don't require file processing
     const analysisData = document.analysis as any;
-    const hasBasicProcessing = document.extractedText || 
-                              (analysisData?.structure?.sections && analysisData.structure.sections.length > 0) ||
-                              hasEditorContent; // Allow editor content without file processing
+    const hasAnalysisSections = Array.isArray(analysisData?.structure?.sections) && analysisData.structure.sections.length > 0;
+    const hasBasicProcessing = hasExtractedText || hasAnalysisSections || hasEditorContent;
 
     if (!hasBasicProcessing && !hasEditorContent) {
       return NextResponse.json(

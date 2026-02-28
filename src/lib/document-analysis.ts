@@ -101,8 +101,9 @@ export function canAnalyzeDocument(document: {
   }
 
   // Check if document has analyzable content
-  const hasFileContent = document.filePath && document.extractedText;
-  const hasEditorContent = (document as any).content?.sections?.length > 0 || (document as any).content?.extractedText;
+  const hasExtractedText = typeof document.extractedText === 'string' && document.extractedText.trim().length > 0
+  const hasFileContent = !!document.filePath && hasExtractedText
+  const hasEditorContent = (document as any).content?.sections?.length > 0 || (typeof (document as any).content?.extractedText === 'string' && (document as any).content.extractedText.trim().length > 0)
   
   // Document must have either file content or editor content
   if (!hasFileContent && !hasEditorContent) {
@@ -132,8 +133,9 @@ export function getAnalysisCapabilityMessage(document: {
   }
 
   // Check content availability
-  const hasFileContent = document.filePath && document.extractedText;
-  const hasEditorContent = (document as any).content?.sections?.length > 0 || (document as any).content?.extractedText;
+  const hasExtractedText = typeof document.extractedText === 'string' && document.extractedText.trim().length > 0
+  const hasFileContent = !!document.filePath && hasExtractedText
+  const hasEditorContent = (document as any).content?.sections?.length > 0 || (typeof (document as any).content?.extractedText === 'string' && (document as any).content.extractedText.trim().length > 0)
   
   if (!hasFileContent && !hasEditorContent) {
     return 'Document has no analyzable content. Please upload a file or add content in the editor.'
