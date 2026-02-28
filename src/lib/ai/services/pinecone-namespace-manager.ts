@@ -25,15 +25,34 @@ export interface NamespaceValidationResult {
 }
 
 export class PineconeNamespaceManager {
-  private pinecone: Pinecone
+  private pinecone: Pinecone | null = null
   private namespaceCache: Map<string, NamespaceInfo> = new Map()
   private cacheExpiryMs = 5 * 60 * 1000 // 5 minutes cache
   private lastCacheClean = Date.now()
 
-  constructor() {
-    this.pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY!,
-    })
+  constructor() {}
+
+  private getPineconeClient(): Pinecone {
+    if (this.pinecone) {
+      return this.pinecone
+    }
+
+    const apiKey = process.env.PINECONE_API_KEY
+    if (!apiKey) {
+      throw new Error('PINECONE_API_KEY is not configured')
+    }
+
+    this.pinecone = new Pinecone({ apiKey })
+    return this.pinecone
+  }
+
+  private getIndexName(): string {
+    const indexName = process.env.PINECONE_INDEX_NAME
+    if (!indexName) {
+      throw new Error('PINECONE_INDEX_NAME is not configured')
+    }
+
+    return indexName
   }
 
   /**
@@ -169,7 +188,7 @@ export class PineconeNamespaceManager {
    */
   private async namespaceExists(namespace: string): Promise<boolean> {
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       
       // Try to get stats for the specific namespace
       const stats = await index.describeIndexStats({
@@ -196,7 +215,7 @@ export class PineconeNamespaceManager {
    */
   private async createNamespace(namespace: string): Promise<void> {
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       
       // Create a temporary vector to initialize the namespace
       // This vector will be deleted immediately after creation
@@ -231,7 +250,7 @@ export class PineconeNamespaceManager {
    */
   async getNamespaceStats(namespace: string): Promise<{ vectorCount: number; indexFullness: number }> {
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       const stats = await index.describeIndexStats({
         filter: {}
       })
@@ -256,7 +275,7 @@ export class PineconeNamespaceManager {
    */
   async listOrganizationNamespaces(organizationId: string): Promise<string[]> {
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       const stats = await index.describeIndexStats({
         filter: {}
       })
@@ -283,7 +302,7 @@ export class PineconeNamespaceManager {
    */
   async deleteNamespace(namespace: string): Promise<void> {
     try {
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       
       // Delete all vectors in the namespace
       await index.namespace(namespace).deleteAll()
@@ -402,7 +421,7 @@ export class PineconeNamespaceManager {
 
     try {
       // Test Pinecone connection
-      const index = this.pinecone.index(process.env.PINECONE_INDEX_NAME!)
+      const index = this.getPineconeClient().index(this.getIndexName())
       await index.describeIndexStats()
       pineconeConnected = true
     } catch (error) {

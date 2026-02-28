@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import { QueryProvider } from '@/components/providers/query-provider'
@@ -10,8 +9,6 @@ import { GlobalErrorProvider } from '@/contexts/global-error-context'
 import { Analytics } from '@vercel/analytics/next'
 import { ChunkErrorHandler } from '@/components/error-boundary/chunk-error-handler'
 import './globals.css'
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Document Chat System - AI-Powered Document Management',
@@ -26,7 +23,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className={inter.className} suppressHydrationWarning={true}>
+        <body className="font-sans antialiased" suppressHydrationWarning={true}>
           <ChunkErrorHandler />
           <QueryProvider>
             <ThemeProvider
