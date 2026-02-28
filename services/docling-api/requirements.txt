@@ -1,15 +1,16 @@
-# Docling Document Processing Service Dependencies
+# Force CPU-only PyTorch (prevents huge CUDA/NVIDIA wheels)
+--index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+torchaudio
 
-# Docling - IBM's document processing library (install first to get correct dependencies)
+# Back to normal PyPI for everything else
+--extra-index-url https://pypi.org/simple
+
+# Docling and API deps
 docling
-
-# Core Dependencies (let docling determine compatible versions)
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
 python-multipart>=0.0.6
-
-# PDF to Image Conversion
 PyMuPDF>=1.23.0
-
-# Optional: For better performance
 aiofiles>=23.0.0
