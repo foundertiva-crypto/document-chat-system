@@ -2054,7 +2054,7 @@ export async function DELETE(
     }
 
     // Get document and verify access
-    const document = await prisma.document.findFirst({
+    const document = await prisma.document.findUnique({
       where: { id: documentId },
       select: {
         id: true,
@@ -2181,13 +2181,27 @@ export async function DELETE(
     // Step 2: Soft delete in Prisma database.
     // We use soft delete to avoid failures from legacy FK constraints while
     // keeping behavior consistent with other document queries (deletedAt: null).
-    await prisma.document.update({
-      where: { id: documentId },
+    const softDeleteResult = await prisma.document.updateMany({
+      where: {
+        id: documentId,
+        deletedAt: null
+      },
       data: {
-        deletedAt: new Date(),
-        updatedAt: new Date()
+        deletedAt: new Date()
       }
     });
+
+    if (softDeleteResult.count === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'Document already deleted',
+        details: {
+          storageDeleted,
+          databaseDeleted: false,
+          alreadyDeleted: true
+        }
+      });
+    }
 
     console.log(`✅ Successfully soft deleted document in database: ${documentId}`);
 
