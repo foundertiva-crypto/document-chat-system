@@ -54,7 +54,6 @@ export default function SettingsPage() {
   // Vector Search state
   const [vectorSearch, setVectorSearch] = useState({
     pineconeApiKey: '',
-    pineconeEnvironment: 'us-east-1',
     pineconeIndexName: 'document-chat-index',
   });
 
@@ -573,7 +572,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Pinecone</CardTitle>
               <CardDescription>
-                Optional: Enhanced semantic search for documents
+                Optional: Enhanced semantic search for documents (modern Pinecone only requires API key + index)
                 <a
                   href="https://app.pinecone.io"
                   target="_blank"
@@ -607,15 +606,6 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="pineconeEnvironment">Environment</Label>
-                  <Input
-                    id="pineconeEnvironment"
-                    value={vectorSearch.pineconeEnvironment}
-                    onChange={(e) => setVectorSearch({ ...vectorSearch, pineconeEnvironment: e.target.value })}
-                    placeholder="us-east-1"
-                  />
-                </div>
-                <div>
                   <Label htmlFor="pineconeIndexName">Index Name</Label>
                   <Input
                     id="pineconeIndexName"
@@ -630,7 +620,6 @@ export default function SettingsPage() {
                 <Button
                   onClick={() => testConnection('pinecone', {
                     apiKey: vectorSearch.pineconeApiKey,
-                    environment: vectorSearch.pineconeEnvironment,
                   })}
                   disabled={!vectorSearch.pineconeApiKey || testingConnection === 'pinecone'}
                   variant="outline"

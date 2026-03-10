@@ -15,7 +15,6 @@ export interface UserApiKeys {
 
   // Vector Database
   pineconeApiKey?: string;
-  pineconeEnvironment?: string;
   pineconeIndexName?: string;
 
   // File Storage (optional - uses server keys if not provided)
@@ -92,7 +91,7 @@ export function hasRequiredKeysForVectorization(): boolean {
 
   // Need AI key for embeddings and Pinecone for storage
   const hasAIKey = !!(keys.openrouterApiKey || keys.openaiApiKey);
-  const hasPinecone = !!(keys.pineconeApiKey && keys.pineconeEnvironment && keys.pineconeIndexName);
+  const hasPinecone = !!(keys.pineconeApiKey && keys.pineconeIndexName);
 
   return hasAIKey && hasPinecone;
 }
@@ -121,7 +120,7 @@ export function getConfiguredServices(): {
     hasOpenRouter: !!keys.openrouterApiKey,
     hasOpenAI: !!keys.openaiApiKey,
     hasAnthropic: !!keys.anthropicApiKey,
-    hasPinecone: !!(keys.pineconeApiKey && keys.pineconeEnvironment && keys.pineconeIndexName),
+    hasPinecone: !!(keys.pineconeApiKey && keys.pineconeIndexName),
     hasSupabase: !!(keys.supabaseUrl && keys.supabaseAnonKey)
   };
 }
@@ -145,9 +144,6 @@ export function getMissingKeys(operation: 'analysis' | 'vectorization'): string[
     }
     if (!keys.pineconeApiKey) {
       missing.push('Pinecone API Key');
-    }
-    if (!keys.pineconeEnvironment) {
-      missing.push('Pinecone Environment');
     }
     if (!keys.pineconeIndexName) {
       missing.push('Pinecone Index Name');
@@ -175,9 +171,6 @@ export function createApiKeyHeaders(): Record<string, string> {
   }
   if (keys.pineconeApiKey) {
     headers['x-pinecone-api-key'] = keys.pineconeApiKey;
-  }
-  if (keys.pineconeEnvironment) {
-    headers['x-pinecone-environment'] = keys.pineconeEnvironment;
   }
   if (keys.pineconeIndexName) {
     headers['x-pinecone-index'] = keys.pineconeIndexName;

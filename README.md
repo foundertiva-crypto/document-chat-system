@@ -413,7 +413,6 @@ IMAGEROUTER_API_KEY="..."          # Optional: Visual AI
 
 # Pinecone Vector Search (Recommended)
 PINECONE_API_KEY="..."
-PINECONE_ENVIRONMENT="us-west1-gcp"
 PINECONE_INDEX_NAME="document-embeddings"
 
 # Upstash Redis Caching (Recommended)
@@ -1115,7 +1114,6 @@ ENCRYPTION_KEY="your-secure-32-char-encryption-key-here"
 # RECOMMENDED: Vector Search (Pinecone)
 # ============================================
 PINECONE_API_KEY="your-pinecone-api-key"
-PINECONE_ENVIRONMENT="us-west1-gcp"
 PINECONE_INDEX_NAME="document-embeddings"
 # Get from: https://app.pinecone.io/ → API Keys
 

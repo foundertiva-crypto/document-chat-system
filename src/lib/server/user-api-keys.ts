@@ -12,7 +12,6 @@ export interface ExtractedApiKeys {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   pineconeApiKey?: string;
-  pineconeEnvironment?: string;
   pineconeIndexName?: string;
 }
 
@@ -30,7 +29,6 @@ export function extractUserApiKeys(request: NextRequest | Request): ExtractedApi
     openaiApiKey: headers.get('x-openai-api-key') || undefined,
     anthropicApiKey: headers.get('x-anthropic-api-key') || undefined,
     pineconeApiKey: headers.get('x-pinecone-api-key') || undefined,
-    pineconeEnvironment: headers.get('x-pinecone-environment') || undefined,
     pineconeIndexName: headers.get('x-pinecone-index') || undefined,
   };
 
@@ -66,7 +64,6 @@ export function getAIServiceConfig(userKeys: ExtractedApiKeys) {
 export function getPineconeConfig(userKeys: ExtractedApiKeys) {
   return {
     apiKey: userKeys.pineconeApiKey || process.env.PINECONE_API_KEY,
-    environment: userKeys.pineconeEnvironment || process.env.PINECONE_ENVIRONMENT || 'us-east-1',
     indexName: userKeys.pineconeIndexName || process.env.PINECONE_INDEX_NAME || 'document-chat-index',
   };
 }
@@ -94,9 +91,6 @@ export function validateRequiredKeys(
     const config = getPineconeConfig(userKeys);
     if (!config.apiKey) {
       missing.push('Pinecone API Key');
-    }
-    if (!config.environment) {
-      missing.push('Pinecone Environment');
     }
     if (!config.indexName) {
       missing.push('Pinecone Index Name');

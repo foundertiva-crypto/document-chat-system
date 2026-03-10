@@ -226,7 +226,7 @@ async function testSupabase(credentials: { url: string; anonKey: string }) {
 /**
  * Test Pinecone connection
  */
-async function testPinecone(credentials: { apiKey: string; environment: string }) {
+async function testPinecone(credentials: { apiKey: string }) {
   try {
     // Pinecone now uses a single API endpoint: https://api.pinecone.io
     const response = await fetch('https://api.pinecone.io/indexes', {
