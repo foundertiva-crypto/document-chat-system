@@ -851,19 +851,25 @@ export function DocumentDetailsView({ documentId }: DocumentDetailsViewProps) {
       return;
     }
     
-    // Check if document has extracted text available
-    const hasExtractedText = document.extractedText;
-    if (!hasExtractedText) {
-      console.log('⚠️ [ANALYSIS START] Document missing extracted text, showing warning');
+    // Check if document has analyzable content available
+    const hasExtractedText = typeof document.extractedText === 'string' && document.extractedText.trim().length > 0
+    const hasContentExtractedText = typeof (document.content as any)?.extractedText === 'string' && (document.content as any).extractedText.trim().length > 0
+    const hasContentSections = Array.isArray((document.content as any)?.sections) && (document.content as any).sections.length > 0
+    const hasAnalyzableContent = hasExtractedText || hasContentExtractedText || hasContentSections
+
+    if (!hasAnalyzableContent) {
+      console.log('⚠️ [ANALYSIS START] Document missing analyzable content, showing warning');
       console.log('🔍 [ANALYSIS START] Document debug info:', {
         documentId: document.id,
         status: document.processing?.currentStatus,
         hasFilePath: !!document.filePath,
-        hasExtractedText: !!document.extractedText,
+        hasExtractedText,
+        hasContentExtractedText,
+        hasContentSections,
         canAnalyzeFromFunction: canAnalyzeDocument(document),
         hasContent: document.content ? 'exists' : 'missing'
       });
-      notify.warning('AI Analysis', 'Document must have basic processing completed first. Please wait for upload processing to finish.')
+      notify.warning('AI Analysis', 'Document must have basic processing completed first. Please wait for upload processing to finish or add content in the editor.')
       return
     }
 
