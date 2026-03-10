@@ -27,65 +27,28 @@ import {
   Layers,
   Terminal,
   CheckCircle,
-  GitBranch,
   Server,
   Cpu,
   HardDrive,
   Network,
-  Github,
   Menu,
   X,
   MessageSquare
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 export function LandingPageClient() {
-  const [activeSection, setActiveSection] = useState<string>('')
-  const [starCount, setStarCount] = useState<number | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [donationBannerVisible, setDonationBannerVisible] = useState(true)
-
-  useEffect(() => {
-    // Fetch GitHub stars count with proper error handling
-    const fetchStars = async () => {
-      try {
-        const res = await fetch('https://api.github.com/repos/watat83/document-chat-system', {
-          headers: {
-            'Accept': 'application/vnd.github.v3+json',
-          },
-        })
-
-        if (!res.ok) {
-          // Repository might be new or private, silently fail
-          return
-        }
-
-        const data = await res.json()
-        if (data.stargazers_count !== undefined) {
-          setStarCount(data.stargazers_count)
-        }
-      } catch (err) {
-        // Silently fail - stars count is not critical
-        // Repository might be too new or API rate limited
-      }
-    }
-
-    fetchStars()
-  }, [])
 
   // JSON-LD structured data for SEO
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    'name': 'Document Chat System',
+    'name': 'TIVA',
     'applicationCategory': 'BusinessApplication',
     'description': 'AI-powered document analysis and intelligent chat platform. Upload PDFs, Word documents, images and more. Chat with AI using semantic search and RAG (Retrieval Augmented Generation).',
     'operatingSystem': 'Web',
-    'offers': {
-      '@type': 'Offer',
-      'price': '0',
-      'priceCurrency': 'USD',
-    },
     'aggregateRating': {
       '@type': 'AggregateRating',
       'ratingValue': '5',
@@ -118,7 +81,7 @@ export function LandingPageClient() {
       <header className={`sticky ${donationBannerVisible ? 'top-[48px]' : 'top-0'} z-40 px-4 lg:px-6 h-14 flex items-center border-b bg-white/95 dark:bg-gray-950/95 backdrop-blur supports-[backdrop-filter]:bg-white/95 dark:supports-[backdrop-filter]:bg-gray-950/95 transition-all duration-300`}>
         <Link className="flex items-center justify-center" href="/">
           <Files className="h-6 w-6 text-blue-600 dark:text-blue-400 sm:mr-2" />
-          <span className="font-bold text-lg hidden sm:inline">Document Chat System</span>
+          <span className="font-bold text-lg hidden sm:inline">TIVA</span>
         </Link>
         {/* Desktop Navigation */}
         <nav className="ml-auto hidden md:flex gap-2 sm:gap-4 items-center">
@@ -140,22 +103,6 @@ export function LandingPageClient() {
           </Link>
           <Link href="/sign-up">
             <Button size="sm">Get Started</Button>
-          </Link>
-          <Link
-            href="https://github.com/watat83/document-chat-system"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden lg:inline-block"
-          >
-            <Button variant="outline" className="gap-2">
-              <Github className="h-4 w-4" />
-              <span>Star on GitHub</span>
-              {starCount !== null && (
-                <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                  {starCount.toLocaleString()}
-                </Badge>
-              )}
-            </Button>
           </Link>
         </nav>
 
@@ -205,23 +152,6 @@ export function LandingPageClient() {
             >
               Tech Stack
             </Link>
-            <Link
-              href="https://github.com/watat83/document-chat-system"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-2"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <Button variant="outline" className="w-full gap-2 justify-center">
-                <Github className="h-4 w-4" />
-                <span>Star on GitHub</span>
-                {starCount !== null && (
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs">
-                    {starCount.toLocaleString()}
-                  </Badge>
-                )}
-              </Button>
-            </Link>
             <div className="flex gap-2 pt-2 border-t">
               <Link href="/sign-in" className="flex-1" onClick={() => setMobileMenuOpen(false)}>
                 <Button variant="outline" size="sm" className="w-full">Sign In</Button>
@@ -238,34 +168,24 @@ export function LandingPageClient() {
       <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48 bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center space-y-6 text-center">
-            <Badge variant="secondary" className="mb-4">
-              <GitBranch className="h-3 w-3 mr-1" />
-              Open Source • MIT Licensed
-            </Badge>
+            <Badge variant="secondary" className="mb-4">TIVA</Badge>
             <div className="space-y-4">
               <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none bg-clip-text text-transparent bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 animate-gradient-text">
-                AI-Powered Document Chat System
+                TIVA FOUNDER AI DOCUMENT MANAGEMENT
               </h1>
               <p className="mx-auto max-w-[800px] text-gray-600 md:text-xl lg:text-2xl dark:text-gray-300">
                 Upload documents, chat with AI about their content, and extract insights instantly.
                 Powered by advanced AI models with semantic search and intelligent document processing.
               </p>
               <p className="mx-auto max-w-[700px] text-gray-500 md:text-lg dark:text-gray-400">
-                Open-source document chat platform built with Next.js 15, React 19, and TypeScript.
-                Deploy your own instance with optional billing to monetize as a SaaS.
+                TIVA helps teams centralize knowledge, automate document workflows, and make faster decisions with AI.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-3xl mx-auto">
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl mx-auto">
               <Link href="/sign-up" className="flex-1">
                 <Button size="lg" className="w-full">
                   <Sparkles className="mr-2 h-5 w-5" />
                   Start Chatting for Free
-                </Button>
-              </Link>
-              <Link href="https://github.com/watat83/document-chat-system" className="flex-1">
-                <Button variant="outline" size="lg" className="w-full">
-                  <GitBranch className="mr-2 h-5 w-5" />
-                  View on GitHub
                 </Button>
               </Link>
               <Link href="https://discord.gg/ubWcC2PS" target="_blank" rel="noopener noreferrer" className="flex-1">
@@ -274,28 +194,6 @@ export function LandingPageClient() {
                   Join Discord
                 </Button>
               </Link>
-            </div>
-
-            {/* YouTube Video Demo */}
-            <div className="w-full max-w-4xl mx-auto pt-8">
-              <div className="relative rounded-xl overflow-hidden shadow-2xl border-4 border-gray-200 dark:border-gray-700">
-                <div className="aspect-video">
-                  <iframe
-                    width="100%"
-                    height="100%"
-                    src="https://www.youtube.com/embed/P42nlCmicVM?si=SKnyKRVOJpAC9kDn"
-                    title="Document Chat System Demo"
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    referrerPolicy="strict-origin-when-cross-origin"
-                    allowFullScreen
-                    className="absolute inset-0"
-                  />
-                </div>
-              </div>
-              <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-4">
-                Watch the complete demo and walkthrough
-              </p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600 dark:text-gray-400 pt-4">
@@ -329,7 +227,7 @@ export function LandingPageClient() {
               Built for Every Industry
             </h2>
             <p className="max-w-[900px] text-gray-600 md:text-xl dark:text-gray-400">
-              From knowledge management to customer support, Document Chat System adapts to your needs
+              From knowledge management to customer support, TIVA adapts to your needs
             </p>
           </div>
 
@@ -341,7 +239,7 @@ export function LandingPageClient() {
                 </div>
                 <CardTitle>Knowledge Management</CardTitle>
                 <CardDescription>
-                  Build searchable knowledge bases, research libraries, and personal "second brains" with AI-powered recall
+                  Build searchable knowledge bases, research libraries, and personal &ldquo;second brains&rdquo; with AI-powered recall
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -411,12 +309,10 @@ export function LandingPageClient() {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               And many more: HR onboarding, content creation, medical research, property management, and more
             </p>
-            <Link href="https://github.com/watat83/document-chat-system#use-cases" target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="lg">
-                View All Use Cases
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
+            <Button variant="outline" size="lg" disabled>
+              More Use Cases Coming Soon
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
         </div>
       </section>
@@ -431,7 +327,7 @@ export function LandingPageClient() {
             </h2>
             <p className="max-w-[900px] text-gray-600 md:text-xl dark:text-gray-400">
               A complete, production-ready platform with advanced features for document management,
-              AI chat, vector search, multi-tenancy, and optional monetization.
+              AI chat, vector search, and multi-tenant collaboration.
             </p>
           </div>
 
@@ -961,9 +857,6 @@ export function LandingPageClient() {
                     <Badge variant="secondary" className="text-xs">Docker</Badge>
                   </li>
                   <li className="flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">Stripe (optional)</Badge>
-                  </li>
-                  <li className="flex items-center gap-2">
                     <Badge variant="secondary" className="text-xs">Sentry</Badge>
                   </li>
                 </ul>
@@ -975,283 +868,6 @@ export function LandingPageClient() {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               All dependencies are actively maintained and production-proven at scale
             </p>
-            <Link href="https://github.com/watat83/document-chat-system">
-              <Button variant="outline">
-                <GitBranch className="mr-2 h-4 w-4" />
-                View Full Stack on GitHub
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Monetization Section */}
-      <section id="monetization" className="w-full py-12 md:py-24 lg:py-32 bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-950">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12">
-            <Badge variant="outline">Built-in Monetization</Badge>
-            <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-              Turn Your Deployment into a SaaS Business
-            </h2>
-            <p className="max-w-[900px] text-gray-600 md:text-xl dark:text-gray-400">
-              <strong>Optional Stripe integration</strong> lets you charge users for your deployment.
-              Subscription management, usage limits, and billing are built-in and ready to go.
-            </p>
-            <Badge variant="secondary" className="text-sm">
-              <Shield className="h-3 w-3 mr-1" />
-              Billing features are 100% optional - self-host for free without any payment integration
-            </Badge>
-          </div>
-
-          {/* Customization Example */}
-          <div className="mx-auto max-w-4xl mb-12">
-            <Card className="border-2 border-blue-500">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Code className="h-5 w-5" />
-                  Easy Pricing Customization
-                </CardTitle>
-                <CardDescription>
-                  Create pricing plans via API or directly in the database, then sync with Stripe
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-3 gap-4 text-center">
-                  <div className="p-4 border rounded-lg">
-                    <Terminal className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                    <h4 className="font-semibold mb-1">Use Admin API</h4>
-                    <p className="text-sm text-gray-600">POST /api/v1/admin/pricing-plans</p>
-                  </div>
-                  <div className="p-4 border rounded-lg">
-                    <Database className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                    <h4 className="font-semibold mb-1">Or Edit Database</h4>
-                    <p className="text-sm text-gray-600">pricing_plans table via Prisma</p>
-                  </div>
-                  <div className="p-4 border rounded-lg">
-                    <Zap className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                    <h4 className="font-semibold mb-1">Stripe Sync</h4>
-                    <p className="text-sm text-gray-600">Optional auto-sync with Stripe</p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto">
-                  <pre className="text-sm"><code>{`{
-  planType: "STARTER",
-  displayName: "Starter Plan",
-  description: "Perfect for individuals",
-  monthlyPrice: 2900, // $29 in cents
-  yearlyPrice: 29000, // $290 yearly (2 months free)
-  currency: "usd",
-  features: {
-    list: [
-      "3 user seats",
-      "500 AI credits/month",
-      "100 documents/month",
-      "Priority support"
-    ]
-  },
-  limits: {
-    seats: 3,
-    documentsPerMonth: 100,
-    aiCreditsPerMonth: 500,
-    storageGB: 10
-  },
-  isActive: true,
-  isPopular: true,
-  displayOrder: 1,
-  createStripeProducts: true
-}`}</code></pre>
-                </div>
-
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Fully customizable limits including: <code className="bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">seats</code>,
-                  {' '}<code className="bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">documentsPerMonth</code>,
-                  {' '}<code className="bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">aiCreditsPerMonth</code>,
-                  {' '}<code className="bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">storageGB</code>, and more
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Pricing Tiers Example */}
-          <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Free</CardTitle>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">$0</span>
-                  <span className="text-gray-600 dark:text-gray-400">/month</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    1 user seat
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    50 AI credits/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    100 pages/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Basic support
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card className="border-2 border-blue-500">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Starter</CardTitle>
-                  <Badge>Popular</Badge>
-                </div>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">$29</span>
-                  <span className="text-gray-600 dark:text-gray-400">/month</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    3 user seats
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    500 AI credits/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    1,000 pages/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Priority support
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Professional</CardTitle>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">$99</span>
-                  <span className="text-gray-600 dark:text-gray-400">/month</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    10 user seats
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    2,000 AI credits/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    5,000 pages/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Premium support
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Enterprise</CardTitle>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">Custom</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Unlimited seats
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Custom AI credits
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    Unlimited pages
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    24/7 dedicated support
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-12 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              These are examples - fully customizable to your needs. Disable billing entirely if you just want to self-host for free.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Open Source Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-50 dark:bg-gray-900">
-        <div className="container px-4 md:px-6">
-          <div className="mx-auto max-w-4xl text-center space-y-6">
-            <Badge variant="outline" className="mb-4">
-              <GitBranch className="h-3 w-3 mr-1" />
-              Open Source
-            </Badge>
-            <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-              Free Forever, Open to Everyone
-            </h2>
-            <p className="text-gray-600 md:text-xl dark:text-gray-400">
-              Document Chat System is MIT licensed. Use it for personal projects, commercial products,
-              or build your own SaaS business. No restrictions, no vendor lock-in.
-            </p>
-            <div className="grid md:grid-cols-3 gap-6 mt-8">
-              <div className="p-6 border rounded-lg">
-                <Code className="h-10 w-10 text-blue-600 mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">MIT License</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Permissive license allowing commercial use, modification, and distribution
-                </p>
-              </div>
-              <div className="p-6 border rounded-lg">
-                <Users className="h-10 w-10 text-green-600 mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">Community Driven</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Active development, regular updates, and welcoming community contributions
-                </p>
-              </div>
-              <div className="p-6 border rounded-lg">
-                <Shield className="h-10 w-10 text-purple-600 mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">No Vendor Lock-In</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Self-host anywhere, use your own infrastructure, keep full control of your data
-                </p>
-              </div>
-            </div>
-            <div className="pt-6">
-              <Link href="https://github.com/watat83/document-chat-system">
-                <Button size="lg" variant="outline">
-                  <GitBranch className="mr-2 h-5 w-5" />
-                  Star on GitHub
-                </Button>
-              </Link>
-            </div>
           </div>
         </div>
       </section>
@@ -1277,8 +893,8 @@ export function LandingPageClient() {
             </div>
             <div className="flex flex-col items-center space-y-2 p-6 border rounded-lg">
               <Shield className="h-12 w-12 text-orange-600" />
-              <div className="text-4xl font-bold">100%</div>
-              <p className="text-gray-600 dark:text-gray-400 text-center">Open Source</p>
+              <div className="text-4xl font-bold">24/7</div>
+              <p className="text-gray-600 dark:text-gray-400 text-center">Reliable Support</p>
             </div>
           </div>
         </div>
@@ -1311,19 +927,7 @@ export function LandingPageClient() {
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 dark:text-gray-400">
-                  The platform is free and open source. Configure your AI provider API keys to enable chat features.
-                  Supports multiple AI providers including OpenRouter, OpenAI, Anthropic, and more.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Can I monetize my deployment?</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Yes! The optional Stripe integration lets you create subscription plans, set usage limits,
-                  and charge users for your deployment. It's completely optional - you can also run it for free without any billing features.
+                  TIVA runs on your selected AI providers. Configure your provider API keys to enable chat features.
                 </p>
               </CardContent>
             </Card>
@@ -1333,9 +937,8 @@ export function LandingPageClient() {
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Deploy to <strong>Vercel</strong> with our automated setup script that syncs all environment variables in one command.
-                  Or use the included production-ready Dockerfile for any platform that supports Docker (AWS, GCP, Azure, DigitalOcean, Railway, Render).
-                  Full step-by-step deployment guide with automated scripts available in the README.
+                  Use the included production-ready Dockerfile for any platform that supports Docker (AWS, GCP, Azure, DigitalOcean, Railway, Render).
+                  Full step-by-step deployment guidance is available in your project documentation.
                 </p>
               </CardContent>
             </Card>
@@ -1352,32 +955,22 @@ export function LandingPageClient() {
                 Ready to Transform Your Documents?
               </h2>
               <p className="max-w-[700px] text-blue-100 md:text-xl">
-                Start chatting with your documents today. Free, open source, and ready to deploy.
+                Start managing and chatting with your documents using TIVA today.
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-2xl">
+            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xl">
               <Link href="/sign-up" className="flex-1">
                 <Button size="lg" variant="secondary" className="w-full">
                   <Sparkles className="mr-2 h-5 w-5" />
-                  Start Free Trial
+                  Get Started with TIVA
                 </Button>
               </Link>
-              <Link href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwatat83%2Fdocument-chat-system&env=DATABASE_URL,NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,CLERK_SECRET_KEY,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY&envDescription=Required%20environment%20variables%20for%20Document%20Chat%20System&envLink=https%3A%2F%2Fgithub.com%2Fwatat83%2Fdocument-chat-system%2Fblob%2Fmain%2F.env.example&project-name=document-chat-system&repository-name=document-chat-system" className="flex-1" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="default" className="w-full bg-black hover:bg-gray-900 text-white">
-                  <Zap className="mr-2 h-5 w-5" />
-                  Deploy to Vercel
-                </Button>
-              </Link>
-              <Link href="https://github.com/watat83/document-chat-system" className="flex-1">
+              <Link href="/sign-in" className="flex-1">
                 <Button size="lg" variant="outline" className="w-full bg-transparent text-white border-white hover:bg-white hover:text-blue-600">
-                  <GitBranch className="mr-2 h-5 w-5" />
-                  View on GitHub
+                  Sign In
                 </Button>
               </Link>
             </div>
-            <p className="text-sm text-blue-100">
-              No credit card required • Deploy in minutes • 100% open source
-            </p>
           </div>
         </div>
       </section>
@@ -1385,23 +978,14 @@ export function LandingPageClient() {
       {/* Footer */}
       <footer className="flex flex-col gap-4 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          © 2025 Document Chat System. MIT Licensed. Built with ❤️ for the open source community.
+          © 2025 TIVA. All rights reserved.
         </p>
         <nav className="sm:ml-auto flex gap-4 sm:gap-6">
-          <Link className="text-xs hover:underline underline-offset-4" href="https://github.com/watat83/document-chat-system">
-            GitHub
+          <Link className="text-xs hover:underline underline-offset-4" href="/sign-in">
+            Sign In
           </Link>
-          <Link className="text-xs hover:underline underline-offset-4" href="https://discord.gg/ubWcC2PS" target="_blank" rel="noopener noreferrer">
-            Discord
-          </Link>
-          <Link className="text-xs hover:underline underline-offset-4" href="https://github.com/watat83/document-chat-system/blob/main/README.md">
-            Documentation
-          </Link>
-          <Link className="text-xs hover:underline underline-offset-4" href="https://github.com/watat83/document-chat-system/issues">
-            Issues
-          </Link>
-          <Link className="text-xs hover:underline underline-offset-4" href="https://github.com/watat83/document-chat-system/blob/main/LICENSE">
-            License
+          <Link className="text-xs hover:underline underline-offset-4" href="/sign-up">
+            Get Started
           </Link>
         </nav>
       </footer>
