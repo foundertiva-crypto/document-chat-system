@@ -78,7 +78,7 @@ export function LandingPageClient() {
       <DonationBanner onVisibilityChange={setDonationBannerVisible} />
 
       {/* Sticky Header with Navigation - positioned below donation banner when visible */}
-      <header className={`sticky ${donationBannerVisible ? 'top-[48px]' : 'top-0'} z-40 px-4 lg:px-6 h-14 flex items-center border-b bg-white/95 dark:bg-gray-950/95 backdrop-blur supports-[backdrop-filter]:bg-white/95 dark:supports-[backdrop-filter]:bg-gray-950/95 transition-all duration-300`}>
+      <header className={`sticky ${donationBannerVisible ? : 'top-0'} z-40 px-4 lg:px-6 h-14 flex items-center border-b bg-white/95 dark:bg-gray-950/95 backdrop-blur supports-[backdrop-filter]:bg-white/95 dark:supports-[backdrop-filter]:bg-gray-950/95 transition-all duration-300`}>
         <Link className="flex items-center justify-center" href="/">
           <Files className="h-6 w-6 text-blue-600 dark:text-blue-400 sm:mr-2" />
           <span className="font-bold text-lg hidden sm:inline">TIVA</span>
