@@ -9,6 +9,10 @@ export default function Page() {
           <p className="text-gray-600 mt-2">Sign in to your account</p>
         </div>
         <SignIn
+          path="/sign-in"
+          routing="path"
+          signUpUrl="/sign-up"
+          fallbackRedirectUrl="/dashboard"
           appearance={{
             elements: {
               formButtonPrimary: 'bg-blue-600 hover:bg-blue-700 text-sm',
