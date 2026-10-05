@@ -156,7 +156,7 @@ class APIErrorHandler implements ErrorHandler {
         type: 'redirect',
         label: 'Sign In Again',
         handler: async () => {
-          window.location.href = '/auth/signin'
+          window.location.assign('/sign-in')
         },
         priority: 'high',
       })
@@ -295,7 +295,7 @@ class AuthenticationErrorHandler implements ErrorHandler {
         handler: async () => {
           // Clear any stale auth data
           localStorage.removeItem('auth-token')
-          window.location.href = '/auth/signin'
+          window.location.assign('/sign-in')
         },
         priority: 'high',
       }

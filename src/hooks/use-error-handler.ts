@@ -483,7 +483,7 @@ export function useErrorHandler(config: ErrorHandlerConfig = {}) {
     // Optionally redirect to login
     if (context?.redirectToLogin) {
       setTimeout(() => {
-        window.location.href = '/auth/signin'
+        window.location.assign('/sign-in')
       }, 2000)
     }
 
